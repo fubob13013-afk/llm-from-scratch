@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第19课 · 评估方法</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>📊 第19课 · 评估方法</h1>
+
+<h2>loss 降了，然后呢？</h2>
+
+<p>训练 loss 在降——这是个好信号。但模型到底好不好，不能只看 loss。</p>
+
+<h2>指标一：Perplexity（困惑度）</h2>
+
+<p>最基础的评估指标，一句话定义：</p>
+<blockquote><strong>Perplexity = exp(交叉熵 loss)</strong></blockquote>
+
+<p>直观理解：Perplexity = 30 意味着模型在预测每个 token 时，平均在 30 个选项之间犹豫不决。越低越好——1.0 意味着模型完全确定（但通常意味着过拟合）。</p>
+
+<pre><code>perplexity = torch.exp(torch.tensor(val_loss))
+print(f"Perplexity: {perplexity:.2f}")  # 例如 28.35</code></pre>
+
+<table>
+  <tr><th>Perplexity</th><th>含义</th></tr>
+  <tr><td>1~5</td><td>几乎过拟合训练数据</td></tr>
+  <tr><td>5~20</td><td>很好的语言模型</td></tr>
+  <tr><td>20~50</td><td>能用但常出错</td></tr>
+  <tr><td>50~100</td><td>勉强学到了一些模式</td></tr>
+  <tr><td>100+</td><td>接近随机猜测</td></tr>
+</table>
+
+<div class="callout">
+  <strong>⚠️ Perplexity 低 ≠ 模型好</strong>
+  模型可能只是背下了训练数据（过拟合），换一批数据 Perplexity 就飙升。
+  而且 Perplexity 是对整个测试集的<strong>平均</strong>——有些句子可能特别好，有些特别差，平均下来看不出。
+</div>
+
+<h2>指标二：常用 Benchmark</h2>
+
+<p>业界用标准化测试衡量模型的真实能力：</p>
+
+<table>
+  <tr><th>Benchmark</th><th>测什么</th><th>中文版</th></tr>
+  <tr><td><strong>HellaSwag</strong></td><td>常识推理——选最合理的句子续写</td><td>—</td></tr>
+  <tr><td><strong>MMLU</strong></td><td>57 个学科的多选题（从数学到法律）</td><td>C-Eval / CMMLU</td></tr>
+  <tr><td><strong>HumanEval</strong></td><td>代码生成——给函数签名，写实现</td><td>—</td></tr>
+  <tr><td><strong>GSM8K</strong></td><td>小学数学应用题</td><td>CMATH</td></tr>
+</table>
+
+<p>Benchmark 的局限：<strong>数据污染</strong>——训练数据里可能混入了 benchmark 的题目，模型只是「背答案」而不是「会推理」。很多模型的 benchmark 高分有水分。</p>
+
+<h2>指标三：人工评估</h2>
+
+<p>最终，好不好用还是人说了算。常用的方法：</p>
+
+<ul>
+  <li><strong>A/B 测试</strong>：把两个模型的输出给人类看，盲选哪个更好</li>
+  <li><strong>Elo 评分</strong>：像国际象棋一样，让模型两两 PK，算 Elo 分（LMSYS Chatbot Arena 就是这么做的）</li>
+  <li><strong>有用性/安全性/真实性</strong>：不是简单的「对不对」，而是「有没有用」「有没有害」「有没有编造」</li>
+</ul>
+
+<h2>如何评估你的第一个模型？</h2>
+
+<p>对你的第一个微型 GPT，不需要跑 benchmark——<strong>定性评估就够了</strong>：</p>
+
+<ol>
+  <li><strong>检查重复</strong>：模型是不是一直重复同一个词或短语？</li>
+  <li><strong>检查连贯性</strong>：生成的句子主谓搭配对不对？前后语义是否相关？</li>
+  <li><strong>检查多样性</strong>：多次用不同 temperature 跑同一个 prompt，输出是不是有变化？</li>
+  <li><strong>检查过拟合</strong>：给一个训练数据中没出现过的话题，看模型是否完全崩溃？</li>
+</ol>
+
+<div class="callout">
+  <strong>🎯 现实预期</strong>
+  你的第一个微缩 GPT（124M 参数 + 小数据集）大概率：
+  Perplexity 在 30~80 之间，生成文字基本通顺但内容常不合逻辑。<br><br>
+  <strong>这完全正常。</strong> GPT-2 small 的官方模型在英文上能做到 PPL ~20，但那是用 40GB 英文文本训练出来的。
+  你的目标不是「做出最好的模型」——而是「验证自己的代码能让模型学到语言」。
+</div>
+
+<hr>
+<h2>✅ Phase 4 完成！</h2>
+
+<p>
+  L17 教你算参数，L18 教你练训练技巧，L19 教你做评估。
+  <strong>你现在不仅能写 GPT 代码，还能解释它为什么好或不好。</strong>
+</p>
+
+<nav class="lesson-nav">
+  <a href="0018-training-techniques.html">← 上一课：训练技巧</a>
+  <a href="../index.html">🏠 回到树屋总览</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>第 19 课 · 评估方法 —— Perplexity 是起点，Benchmark 是参考，人工评估是终点。Phase 4 结束 🏁</p>
+</footer>
+</body>
+</html>

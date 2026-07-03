@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第13课 · 数据准备实战</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .sliding-demo { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-start; margin:1rem 0; }
+  .sliding-demo .window { border:2px solid var(--accent); border-radius:6px; padding:0.5rem 0.7rem; background:var(--code-bg); min-width:12rem; }
+  .sliding-demo .window .pos { font-size:0.7rem; color:var(--muted); }
+  .sliding-demo .window .tokens { font-family:"JetBrains Mono",Consolas,monospace; font-size:0.82rem; }
+  .arrow-r { font-size:2rem; color:var(--accent); display:flex; align-items:center; }
+
+  .batch-viz { margin:1rem 0; }
+  .batch-viz table { width:auto; margin:0; border-collapse:collapse; font-family:"JetBrains Mono",Consolas,monospace; font-size:0.78rem; }
+  .batch-viz td { padding:0.3rem 0.5rem; border:1px solid var(--rule); text-align:center; }
+  .batch-viz .input-col { background:#e3f2fd; }
+  .batch-viz .target-col { background:#e8f5e9; }
+  @media (prefers-color-scheme: dark) {
+    .batch-viz .input-col { background:#0d2137; }
+    .batch-viz .target-col { background:#1b3a1b; }
+  }
+
+  .code-annotated { margin:1rem 0; }
+  .code-annotated .line { display:flex; gap:0.75rem; font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace; font-size:0.8rem; line-height:1.7; }
+  .code-annotated .line .code { flex:0 0 auto; min-width:380px; color:var(--text); }
+  .code-annotated .line .note { color:var(--muted); font-family:"Source Serif 4","Noto Serif CJK SC",serif; font-size:0.78rem; }
+
+  .experiment { margin:1.5rem 0; border:2px solid var(--rule); border-radius:10px; padding:1.25rem; background:var(--code-bg); }
+
+  @media (max-width:640px) {
+    .code-annotated .line { flex-direction:column; gap:0.1rem; }
+    .code-annotated .line .code { min-width:auto; }
+    .sliding-demo { flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>📦 第13课 · 数据准备实战</h1>
+
+<h2>模型是引擎，数据是燃料</h2>
+
+<p>
+  L12 你有了一个能跑的 GPT 模型。但模型现在什么都不会——它的参数是随机的。
+  要让模型学会语言，你需要<strong>喂数据</strong>。这节课就把原始文本变成模型能吃的训练数据。
+</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">原始文本</div><div class="sub">「我喜欢猫」</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">BPE 分词</div><div class="sub">tiktoken</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">Token IDs</div><div class="sub">[42, 318, 7, …]</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">滑动窗口</div><div class="sub">输入/目标 配对</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">DataLoader</div><div class="sub">batch 分批</div></div>
+</div>
+
+<!-- ====== 概念一 ====== -->
+<h2>概念一：选数据 —— 越小越好（一开始）</h2>
+
+<p>
+  训练 GPT 不需要海量数据。对于学习目的，<strong>几百 KB 的文本就够了</strong>——模型会在小数据上快速过拟合，让你看到 loss 下降，获得正反馈。
+</p>
+
+<p>推荐的数据来源（从小到大）：</p>
+
+<table>
+  <tr><th>数据</th><th>大小</th><th>适合</th></tr>
+  <tr><td>一篇小说（如《三体》选段）</td><td>~100KB</td><td>快速验证代码</td></tr>
+  <tr><td>维基百科中文子集</td><td>~50MB</td><td>正式小规模训练</td></tr>
+  <tr><td>开源中文语料（如 BaiduQA）</td><td>~500MB</td><td>得到更像样的结果</td></tr>
+</table>
+
+<pre><code># 最简单的方式：读取一个文本文件
+with open('data.txt', 'r', encoding='utf-8') as f:
+    raw_text = f.read()
+
+print(f"共 {len(raw_text):,} 个字符")    # 例如：共 123,456 个字符</code></pre>
+
+<!-- ====== 概念二 ====== -->
+<h2>概念二：分词 —— 文本变成数字</h2>
+
+<p>
+  L2 讲过 BPE（字节对编码）的原理。这里直接用它——<strong>tiktoken</strong> 是 OpenAI 开源的分词器，和 GPT-2 完全一致。
+</p>
+
+<pre><code>import tiktoken
+
+# 加载 GPT-2 的分词器
+tokenizer = tiktoken.get_encoding("gpt2")
+
+# 分词
+text = "我喜欢猫"
+token_ids = tokenizer.encode(text)
+print(token_ids)   # 例如: [57668, 12345, 23456, ...]
+
+# 还原
+decoded = tokenizer.decode(token_ids)
+print(decoded)     # "我喜欢猫"
+
+# 词表大小
+print(tokenizer.n_vocab)  # 50257</code></pre>
+
+<div class="callout">
+  <strong>⚠️ 中文注意</strong>
+  GPT-2 的 tiktoken 主要面向英文，中文 token 会被切得更碎（一个汉字可能 2-3 个 token）。
+  中文专用模型（如 ChatGLM、Qwen）有自己的分词器，但原理相同。本课程用 GPT-2 分词器是为了保持和模型架构一致。
+</div>
+
+<!-- ====== 概念三 ====== -->
+<h2>概念三：滑动窗口 —— 创造训练样本</h2>
+
+<p>
+  GPT 的训练任务是「给定前面的 token，预测下一个 token」。
+  我们需要从一长串 token ID 中切出<strong>输入-目标配对</strong>。
+</p>
+
+<p>核心思路：用一个固定大小的窗口在 token 序列上滑动，每次滑动产出两个东西：</p>
+<ul>
+  <li><strong>输入（input）</strong>：窗口内的前 N-1 个 token（模型看到的）</li>
+  <li><strong>目标（target）</strong>：窗口内的后 N-1 个 token（模型要预测的 = 输入向右移 1 位）</li>
+</ul>
+
+<div class="experiment">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：滑动窗口切分</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    下面是一段文本分词后的 token ID 序列。拖动窗口大小和步长，看如何切出训练样本。
+  </p>
+  <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+    <label style="font-size:0.78rem;font-weight:600;">窗口大小:</label>
+    <input type="range" id="sw-size" min="4" max="12" value="6" oninput="renderSlidingWindow()">
+    <span id="sw-size-disp" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.8rem;">6</span>
+    <label style="font-size:0.78rem;font-weight:600;">步长 (stride):</label>
+    <input type="range" id="sw-stride" min="1" max="6" value="3" oninput="renderSlidingWindow()">
+    <span id="sw-stride-disp" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.8rem;">3</span>
+  </div>
+  <div id="sliding-window-display"></div>
+</div>
+
+<p>对应的 PyTorch 代码：</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">def create_sliding_windows(token_ids, max_len, stride):</span><span class="note">max_len=窗口大小，stride=步长</span></div>
+  <div class="line"><span class="code">    inputs, targets = [], []</span><span class="note"></span></div>
+  <div class="line"><span class="code">    for i in range(0, len(token_ids) - max_len, stride):</span><span class="note">从 0 开始，每次跳 stride 步</span></div>
+  <div class="line"><span class="code">        inputs.append(token_ids[i : i + max_len])</span><span class="note">窗口内的前 max_len 个 token</span></div>
+  <div class="line"><span class="code">        targets.append(token_ids[i + 1 : i + max_len + 1])</span><span class="note">向右移 1 位：每个位置的「下一个 token」</span></div>
+  <div class="line"><span class="code">    return inputs, targets</span><span class="note"></span></div>
+</dl>
+
+<div class="callout">
+  <strong>💡 为什么 target 是 input 右移一位？</strong><br>
+  这就是「预测下一个 token」的数学表达——input[i] 的正确答案是 target[i]（即 input[i+1]）。
+  训练时模型看着 input，被要求输出 target。这叫做<strong>自监督学习</strong>——不需要人工标注，数据自己就是标签。
+</div>
+
+<!-- ====== 概念四 ====== -->
+<h2>概念四：DataLoader —— 打包成 batch</h2>
+
+<p>
+  滑动窗口产出了几千个小片段。训练时不能一个一个喂——太慢。
+  需要<strong>打包成 batch</strong>（一批同时处理 2-8 个片段），利用 GPU 的并行能力。
+</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">class GPTDataset(torch.utils.data.Dataset):</span><span class="note">PyTorch 标准数据集接口</span></div>
+  <div class="line"><span class="code">    def __init__(self, text, tokenizer, max_len, stride):</span><span class="note"></span></div>
+  <div class="line"><span class="code">        token_ids = tokenizer.encode(text)</span><span class="note">全文本 → token ID 序列</span></div>
+  <div class="line"><span class="code">        self.inputs, self.targets = create_sliding_windows(</span><span class="note"></span></div>
+  <div class="line"><span class="code">            token_ids, max_len, stride)</span><span class="note">切分成几千个片段</span></div>
+  <div class="line"><span class="code"></span><span class="note"></span></div>
+  <div class="line"><span class="code">    def __len__(self):</span><span class="note"></span></div>
+  <div class="line"><span class="code">        return len(self.inputs)</span><span class="note">数据集的样本数</span></div>
+  <div class="line"><span class="code"></span><span class="note"></span></div>
+  <div class="line"><span class="code">    def __getitem__(self, idx):</span><span class="note"></span></div>
+  <div class="line"><span class="code">        return torch.tensor(self.inputs[idx]), torch.tensor(self.targets[idx])</span><span class="note">返回 (input, target) 对</span></div>
+</div>
+
+<p>然后用 <code>DataLoader</code> 自动打包：</p>
+
+<pre><code>from torch.utils.data import DataLoader
+
+dataset = GPTDataset(raw_text, tokenizer, max_len=256, stride=128)
+dataloader = DataLoader(dataset, batch_size=4, shuffle=True, drop_last=True)
+
+# 遍历一个 batch
+for inputs, targets in dataloader:
+    print(f"inputs:  {inputs.shape}")    # (4, 256) — 4 个片段，每段 256 token
+    print(f"targets: {targets.shape}")    # (4, 256) — 同上，右移一位
+    break</code></pre>
+
+<!-- Batch 查看器交互 -->
+<div class="experiment">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：Batch 结构查看器</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    下面模拟了一个 batch（4 个样本，每个长度 8），展示 input 和 target 的偏移关系。
+    把鼠标悬停在一行上，看 input[t] 对应的 target 是 input[t+1]。
+  </p>
+  <div style="margin-bottom:0.5rem;">
+    <label style="font-size:0.78rem;font-weight:600;">样本数:</label>
+    <input type="range" id="bv-batch" min="2" max="6" value="4" oninput="renderBatchViewer()">
+    <span id="bv-batch-disp" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.8rem;">4</span>
+    <label style="font-size:0.78rem;font-weight:600;margin-left:1rem;">长度:</label>
+    <input type="range" id="bv-len" min="4" max="12" value="8" oninput="renderBatchViewer()">
+    <span id="bv-len-disp" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.8rem;">8</span>
+  </div>
+  <div id="batch-viewer-display" style="overflow-x:auto;"></div>
+</div>
+
+<!-- ====== 完整代码 ====== -->
+<h2>完整代码：数据准备流水线</h2>
+
+<pre><code>import torch
+from torch.utils.data import DataLoader, Dataset
+import tiktoken
+
+class GPTDataset(Dataset):
+    def __init__(self, filepath, tokenizer_name="gpt2", max_len=256, stride=128):
+        # 1. 读取文本
+        with open(filepath, 'r', encoding='utf-8') as f:
+            text = f.read()
+
+        # 2. 分词 → token ID
+        tokenizer = tiktoken.get_encoding(tokenizer_name)
+        token_ids = tokenizer.encode(text)
+        print(f"文本长度: {len(text):,} 字符 → {len(token_ids):,} tokens")
+
+        # 3. 滑动窗口切分
+        self.inputs, self.targets = [], []
+        for i in range(0, len(token_ids) - max_len, stride):
+            self.inputs.append(token_ids[i : i + max_len])
+            self.targets.append(token_ids[i+1 : i + max_len + 1])
+
+        print(f"生成 {len(self.inputs):,} 个训练样本")
+
+    def __len__(self):
+        return len(self.inputs)
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.inputs[idx]), torch.tensor(self.targets[idx])
+
+
+def create_dataloader(filepath, batch_size=4, max_len=256, stride=128):
+    dataset = GPTDataset(filepath, max_len=max_len, stride=stride)
+    dataloader = DataLoader(dataset, batch_size=batch_size,
+                            shuffle=True, drop_last=True)
+    return dataloader
+
+
+# 使用示例
+dataloader = create_dataloader("data.txt", batch_size=4)
+for inputs, targets in dataloader:
+    print(f"Batch: inputs {inputs.shape}, targets {targets.shape}")
+    # inputs:  (4, 256)  — 模型输入
+    # targets: (4, 256)  — 正确答案（用来算 loss）
+    break</code></pre>
+
+<div class="callout">
+  <strong>📊 数据要点总结</strong><br>
+  • <strong>训练集/验证集划分</strong>：通常 9:1，验证集不参与训练，只用来评估<br>
+  • <strong>shuffle=True</strong>：每个 epoch 打乱顺序，防止模型记住数据顺序<br>
+  • <strong>drop_last=True</strong>：丢弃最后不完整的 batch，避免 shape 不一致<br>
+  • <strong>stride &lt; max_len</strong>：窗口之间有重叠，数据利用率更高
+</div>
+
+<!-- ====== 总结 ====== -->
+<hr>
+<h2>✅ 这节课你学会了</h2>
+
+<table>
+  <tr><th>步骤</th><th>操作</th><th>产出</th></tr>
+  <tr><td>1. 读文本</td><td><code>open('data.txt').read()</code></td><td>字符串</td></tr>
+  <tr><td>2. 分词</td><td><code>tiktoken.get_encoding("gpt2").encode()</code></td><td>token ID 序列</td></tr>
+  <tr><td>3. 滑动窗口</td><td><code>range(0, len - max_len, stride)</code></td><td>(input, target) 配对</td></tr>
+  <tr><td>4. DataLoader</td><td><code>DataLoader(dataset, batch_size, shuffle)</code></td><td>batch 迭代器</td></tr>
+</table>
+
+<p>
+  数据准备好了。下一课（L14）将把它喂给 L12 的 GPT 模型，跑真正的训练循环——看 loss 数字往下掉。
+</p>
+
+<!-- ====== 导航 ====== -->
+<nav class="lesson-nav">
+  <a href="0012-gpt2-full.html">← 上一课：组装完整 GPT-2</a>
+  <a href="0014-training-loop.html">下一课：训练循环实战 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>
+    第 13 课 · 数据准备实战 —— 从原始文本到 DataLoader 的完整流水线。
+    <strong>数据决定模型的上限，模型只是逼近这个上限。</strong>有问题随时回来问 Bib。
+  </p>
+</footer>
+
+<script>
+// ========== 滑动窗口可视化 ==========
+const SW_TOKENS = [42, 318, 7, 88, 91, 23, 156, 44, 12, 67, 89, 3, 55, 19, 203];
+const SW_NAMES = ['我','喜','欢','猫','，','它','在','吃','鱼','。','天','气','很','好','。'];
+
+function renderSlidingWindow() {
+  const size = parseInt(document.getElementById('sw-size').value);
+  const stride = parseInt(document.getElementById('sw-stride').value);
+  document.getElementById('sw-size-disp').textContent = size;
+  document.getElementById('sw-stride-disp').textContent = stride;
+
+  // Show full sequence
+  let html = '<div style="margin-bottom:1rem;">';
+  html += '<div style="font-size:0.78rem;font-weight:600;margin-bottom:0.3rem;">完整 token 序列（共 ' + SW_TOKENS.length + ' 个）：</div>';
+  html += '<div style="display:flex;gap:0.2rem;flex-wrap:wrap;font-family:JetBrains Mono,Consolas,monospace;font-size:0.75rem;">';
+  for (let i = 0; i < SW_TOKENS.length; i++) {
+    html += '<span style="background:var(--bg);border:1px solid var(--rule);padding:0.2rem 0.35rem;border-radius:3px;" title="token ' + SW_TOKENS[i] + ' = ' + SW_NAMES[i] + '">' + i + '</span>';
+  }
+  html += '</div></div>';
+
+  // Show windows
+  html += '<div style="font-size:0.78rem;font-weight:600;margin-bottom:0.3rem;">窗口切片（大小=' + size + '，步长=' + stride + '）：</div>';
+  let count = 0;
+  for (let start = 0; start + size + 1 <= SW_TOKENS.length; start += stride) {
+    count++;
+    const inputTokens = SW_TOKENS.slice(start, start + size);
+    const targetTokens = SW_TOKENS.slice(start + 1, start + size + 1);
+
+    html += '<div style="margin-bottom:0.75rem;border:1px solid var(--rule);border-radius:6px;padding:0.5rem;background:var(--bg);">';
+    html += '<div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.25rem;">窗口 ' + count + '（起始位置 ' + start + '）：</div>';
+    html += '<div style="display:flex;gap:0.3rem;align-items:center;flex-wrap:wrap;">';
+
+    html += '<span style="font-size:0.65rem;color:#1565c0;font-weight:600;">输入:</span>';
+    for (let t = 0; t < size; t++) {
+      html += '<span style="background:#e3f2fd;border:1px solid #90caf9;padding:0.15rem 0.35rem;border-radius:3px;font-family:JetBrains Mono,Consolas,monospace;font-size:0.73rem;">' + inputTokens[t] + '</span>';
+    }
+
+    html += '<span style="font-size:0.65rem;color:var(--muted);margin:0 0.3rem;">→</span>';
+
+    html += '<span style="font-size:0.65rem;color:#2e7d32;font-weight:600;">目标:</span>';
+    for (let t = 0; t < size; t++) {
+      const isSame = inputTokens[t] === targetTokens[t];
+      html += '<span style="background:#e8f5e9;border:1px solid #a5d6a7;padding:0.15rem 0.35rem;border-radius:3px;font-family:JetBrains Mono,Consolas,monospace;font-size:0.73rem;">' + targetTokens[t] + '</span>';
+    }
+
+    html += '</div></div>';
+  }
+
+  document.getElementById('sliding-window-display').innerHTML = html;
+}
+
+// ========== Batch 查看器 ==========
+function renderBatchViewer() {
+  const batch = parseInt(document.getElementById('bv-batch').value);
+  const len = parseInt(document.getElementById('bv-len').value);
+  document.getElementById('bv-batch-disp').textContent = batch;
+  document.getElementById('bv-len-disp').textContent = len;
+
+  // Generate random-looking but deterministic data
+  let html = '<table class="batch-viz">';
+  html += '<tr><th>样本</th><th>类型</th>';
+  for (let t = 0; t < len; t++) html += '<th>t' + t + '</th>';
+  html += '</tr>';
+
+  for (let b = 0; b < batch; b++) {
+    const seed = b * 100;
+    html += '<tr>';
+    html += '<td rowspan="2" style="font-weight:700;">' + b + '</td>';
+    html += '<td class="input-col">输入</td>';
+    for (let t = 0; t < len; t++) {
+      html += '<td class="input-col">' + ((seed + t) % 50000 + 1) + '</td>';
+    }
+    html += '</tr><tr>';
+    html += '<td class="target-col">目标</td>';
+    for (let t = 0; t < len; t++) {
+      html += '<td class="target-col">' + ((seed + t + 1) % 50000 + 1) + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  html += '<p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem;">';
+  html += '🔍 <span style="background:#e3f2fd;padding:0.1rem 0.3rem;">蓝色=输入</span> <span style="background:#e8f5e9;padding:0.1rem 0.3rem;">绿色=目标</span> ';
+  html += '每行的目标 = 输入右移 1 位。模型看着输入[t]，要预测目标[t]（即输入[t+1]）。</p>';
+
+  document.getElementById('batch-viewer-display').innerHTML = html;
+}
+
+renderSlidingWindow();
+renderBatchViewer();
+</script>
+</body>
+</html>

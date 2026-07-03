@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第15课 · 在云端训练</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>☁️ 第15课 · 在云端训练</h1>
+
+<h2>你没有 GPU？没关系。</h2>
+
+<p>
+  训练 GPT 需要 GPU。但你不必买一块——Google Colab 提供<strong>免费的 T4 GPU</strong>（约 15GB 显存），
+  足够训练一个小型 GPT 模型。国内用户也可以用 AutoDL（按小时付费，几毛钱一小时）。
+</p>
+
+<h2>方案 A：Google Colab（免费，需科学上网）</h2>
+
+<h3>第一步：打开 Colab</h3>
+<ol>
+  <li>打开 <a href="https://colab.research.google.com/" target="_blank" rel="noopener">colab.research.google.com</a></li>
+  <li>点击「新建笔记本」</li>
+  <li>菜单：<strong>修改 → 笔记本设置 → 硬件加速器 → T4 GPU</strong></li>
+</ol>
+
+<h3>第二步：检查 GPU</h3>
+<pre><code>!nvidia-smi
+
+# 应该看到 Tesla T4，15GB VRAM</code></pre>
+
+<h3>第三步：安装依赖 + 上传代码</h3>
+<pre><code>!pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+!pip install tiktoken
+
+# 上传你的 gpt2.py（L12 的完整模型代码）
+from google.colab import files
+files.upload()  # 选择你的 .py 文件</code></pre>
+
+<h3>第四步：跑训练</h3>
+<pre><code># 将 Colab 的 GPU 设为 device
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"使用设备: {device}")
+
+# 加载模型 + 数据 + 训练
+model = GPTModel().to(device)
+dataloader = create_dataloader("data.txt", batch_size=4)
+
+train(model, dataloader, val_loader=None, epochs=5, device=device)</code></pre>
+
+<div class="callout">
+  <strong>⚠️ Colab 限制</strong>
+  免费版 GPU 有使用时长限制（通常连续使用数小时后会被断开），且闲置约 30 分钟会自动断开。
+  <strong>务必保存 checkpoint</strong>——用 <code>torch.save()</code> 存到 Google Drive 或下载到本地。
+</div>
+
+<h2>方案 B：AutoDL（国内，按量付费）</h2>
+
+<p>如果没法科学上网，AutoDL 是国内最好的选择：</p>
+
+<ol>
+  <li>打开 <a href="https://www.autodl.com/" target="_blank" rel="noopener">autodl.com</a>，注册并充值 10 元（够用很久）</li>
+  <li>选一个实例：推荐 <strong>RTX 3080（10GB 显存）</strong>，约 1 元/小时</li>
+  <li>选镜像：PyTorch 2.x + Python 3.10</li>
+  <li>启动后通过 JupyterLab 或 SSH 连接，上传代码和数据</li>
+  <li>和 Colab 一样运行训练脚本</li>
+</ol>
+
+<div class="callout">
+  <strong>💡 AutoDL 小技巧</strong>
+  • 使用「无卡模式」开机（0.1 元/小时）先上传数据、调试代码<br>
+  • 一切就绪后再切到 GPU 实例跑训练<br>
+  • 训练完立即关机，按实际使用时间计费<br>
+  • 数据存在 <code>/root/autodl-tmp/</code>（系统盘，不另收费）
+</div>
+
+<h2>训练监控：看什么指标？</h2>
+
+<table>
+  <tr><th>指标</th><th>正常表现</th><th>异常表现及原因</th></tr>
+  <tr><td>训练 loss</td><td>持续下降，前期快后期慢</td><td>不降→学习率太小或代码bug；震荡→学习率太大</td></tr>
+  <tr><td>验证 loss</td><td>跟随训练 loss 下降</td><td>不降反升→过拟合；远高于训练loss→数据量不足</td></tr>
+  <tr><td>训练速度</td><td>几千~几万 token/秒</td><td>太慢→batch 太小或未用 GPU</td></tr>
+  <tr><td>GPU 利用率</td><td>80%~100%</td><td>很低→batch 太小或数据加载成了瓶颈</td></tr>
+</table>
+
+<h2>训练多久？预期什么结果？</h2>
+
+<p>以小模型（d_model=768, 12层, 124M参数）+ 小数据（~50MB）为例：</p>
+
+<ul>
+  <li><strong>1 epoch</strong>（约 1-2 小时）：loss 从 ~11 降到 ~6——模型还在学基础知识</li>
+  <li><strong>3 epochs</strong>（约 4-6 小时）：loss 降到 ~4——模型开始生成通顺但不一定准确的文本</li>
+  <li><strong>10 epochs</strong>（约 15-20 小时）：loss 降到 ~2——模型过拟合训练数据，但对验证集仍有相当效果</li>
+</ul>
+
+<div class="callout">
+  <strong>🎯 关键心态</strong>
+  你的第一个模型大概率不会生成惊艳的文本——这完全正常。GPT-2 small 本身就不是为中文优化的，
+  加上数据量有限，产出会是一个「能说人话但经常胡说八道」的模型。<br><br>
+  <strong>成功的标准不是模型有多好——而是 loss 在下降。</strong>只要 loss 在降，就说明你的代码是正确的。
+  这就是 Phase 3 的目标：验证你从零写的 GPT 能学会语言模式。
+</div>
+
+<hr>
+<h2>✅ 这节课你学会了</h2>
+
+<table>
+  <tr><th>平台</th><th>费用</th><th>操作</th></tr>
+  <tr><td>Google Colab</td><td>免费</td><td>T4 GPU → 上传代码 → 跑训练 → 下载 checkpoint</td></tr>
+  <tr><td>AutoDL</td><td>~1元/小时</td><td>租 3080 → JupyterLab → 跑训练 → 关机</td></tr>
+</table>
+
+<p>
+  现在模型训练好了，接下来用它生成文本——L16 教你写 <code>generate()</code> 函数。
+</p>
+
+<nav class="lesson-nav">
+  <a href="0014-training-loop.html">← 上一课：训练循环</a>
+  <a href="0016-text-generation.html">下一课：文本生成实战 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>
+    第 15 课 · 在云端训练 —— 不买显卡也能训模型。Colab 免费，AutoDL 便宜。
+    <strong>只要 loss 在下降，你的代码就是对的。</strong>
+  </p>
+</footer>
+</body>
+</html>

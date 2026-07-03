@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第16课 · 文本生成实战</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .gen-output { font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace; font-size:0.85rem; background:var(--code-bg); padding:1rem; border-radius:8px; border:1px solid var(--rule); margin:1rem 0; white-space:pre-wrap; max-height:16rem; overflow-y:auto; }
+  .experiment { margin:1.5rem 0; border:2px solid var(--rule); border-radius:10px; padding:1.25rem; background:var(--code-bg); }
+  .token-stream { display:flex; flex-wrap:wrap; gap:0.15rem; margin:0.5rem 0; }
+  .token-tag { padding:0.2rem 0.4rem; border-radius:3px; font-family:"JetBrains Mono",Consolas,monospace; font-size:0.75rem; background:var(--bg); border:1px solid var(--rule); }
+  .token-tag.picked { background:#d4edda; border-color:#66bb6a; font-weight:700; }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🔮 第16课 · 文本生成实战</h1>
+
+<h2>从概率分布到文字</h2>
+
+<p>
+  训练好的模型输出的是 logits（50257 个分数的向量），不是文字。
+  你需要一个 <code>generate()</code> 函数，把 logits 转换为 token，再把 token 解码为人类可读的文本。
+</p>
+
+<h2>概念一：generate 函数 —— 逐 token 生成</h2>
+
+<p>核心流程——一个 token 一个 token 地循环：</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">输入 prompt</div><div class="sub">"人工智能"</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">模型预测</div><div class="sub">logits → softmax</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">选一个 token</div><div class="sub">采样策略</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">拼上去</div><div class="sub">再输入模型</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">重复</div><div class="sub">直到够长或遇到结束符</div></div>
+</div>
+
+<pre><code>@torch.no_grad()
+def generate(model, tokenizer, prompt, max_new_tokens=50,
+             temperature=0.8, top_k=50, device='cpu'):
+    """给定 prompt，生成后续文本"""
+    model.eval()
+
+    # 1. 把 prompt 编码成 token IDs
+    input_ids = tokenizer.encode(prompt)
+    input_ids = torch.tensor([input_ids]).to(device)  # (1, L)
+
+    generated = input_ids.tolist()[0]
+
+    for _ in range(max_new_tokens):
+        # 2. 前向传播 → logits
+        logits = model(input_ids)              # (1, seq_len, vocab_size)
+        logits = logits[:, -1, :]              # 只取最后一个位置的预测
+        logits = logits / temperature          # Temperature 缩放
+
+        # 3. Top-K 过滤：只保留分数最高的 K 个 token
+        if top_k > 0:
+            topk_vals, _ = torch.topk(logits, top_k)
+            threshold = topk_vals[:, -1:]      # 第 K 大的值
+            logits[logits < threshold] = float('-inf')
+
+        # 4. Softmax → 采样
+        probs = torch.softmax(logits, dim=-1)
+        next_token = torch.multinomial(probs, num_samples=1)  # 按分布随机选
+
+        # 5. 拼到序列末尾
+        input_ids = torch.cat([input_ids, next_token], dim=-1)
+        generated.append(next_token.item())
+
+        # 6. 遇到结束符就停
+        if next_token.item() == tokenizer.eos_token_id:
+            break
+
+    return tokenizer.decode(generated)
+
+# 使用示例
+output = generate(model, tokenizer, "人工智能的未来是",
+                  max_new_tokens=100, temperature=0.8, top_k=50)
+print(output)</code></pre>
+
+<h2>概念二：三种采样策略</h2>
+
+<table>
+  <tr><th>策略</th><th>代码</th><th>效果</th></tr>
+  <tr><td><strong>Temperature</strong></td><td><code>logits / T</code></td><td>T&lt;1 更确定（保守），T&gt;1 更随机（有创意）</td></tr>
+  <tr><td><strong>Top-K</strong></td><td><code>topk(logits, K)</code></td><td>只从分数最高的 K 个中选，过滤低分噪声</td></tr>
+  <tr><td><strong>Top-P (Nucleus)</strong></td><td>累加到 P 的 token</td><td>只从累积概率达 P 的最小集合中选，动态适应</td></tr>
+</table>
+
+<div class="callout">
+  <strong>🔗 回到 L7</strong>
+  L7 的 Temperature 采样实验室讲的就是这里。L7 的交互实验相当于把 generate 中的采样逻辑提取出来让你手动调。
+</div>
+
+<!-- 交互：生成模拟器 -->
+<div class="experiment">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：逐 token 生成演示</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    模拟 generate() 的每一步——看模型如何从一个 prompt 开始，逐 token 生成文本。
+  </p>
+  <div style="margin-bottom:0.8rem;">
+    <label style="font-size:0.78rem;font-weight:600;">Temperature:</label>
+    <input type="range" id="gen-t" min="0.2" max="2.0" step="0.1" value="1.0" onchange="document.getElementById('gen-t-disp').textContent=this.value">
+    <span id="gen-t-disp" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.8rem;">1.0</span>
+    <button onclick="stepGeneration()" style="padding:0.35rem 0.8rem;font-size:0.85rem;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;margin-left:1rem;">▶ 下一步</button>
+    <button onclick="resetGeneration()" style="padding:0.35rem 0.8rem;font-size:0.85rem;font-weight:600;border:1px solid var(--accent);border-radius:4px;background:var(--bg);color:var(--accent);cursor:pointer;margin-left:0.4rem;">↺ 重置</button>
+  </div>
+  <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.3rem;">已生成：<span id="gen-text-display" style="font-weight:400;">人工智能</span></div>
+  <div id="gen-candidates-display"></div>
+</div>
+
+<h2>概念三：你的第一个生成结果</h2>
+
+<p>训练后，试试不同的 prompt 和参数组合：</p>
+
+<pre><code># 试试这些 prompt:
+prompts = [
+    "人工智能的未来是",          # 开放式
+    "今天天气真好，",            # 日常
+    "根据爱因斯坦的相对论，",     # 知识类（模型大概率胡说八道）
+]
+
+for prompt in prompts:
+    for temp in [0.5, 0.8, 1.2]:
+        output = generate(model, tokenizer, prompt,
+                         max_new_tokens=80, temperature=temp)
+        print(f"[T={temp}] {output}\n")</code></pre>
+
+<div class="callout">
+  <strong>🎯 预期结果与下一步</strong>
+  你的第一个模型生成的文本可能：<br>
+  • 语法基本通顺但内容荒谬（正常——小数据+小模型的必然结果）<br>
+  • 过度重复某个词或短语（叫「重复退化」，增加 temperature 或 top_k 可缓解）<br>
+  • 中文夹杂乱码 token（GPT-2 tokenizer 对中文不友好，正常现象）<br><br>
+  <strong>下一步建议：</strong><br>
+  ① 换一个更大的中文语料（如中文维基子集）<br>
+  ② 换成中文专用模型架构（如 Qwen-0.5B 的配置）<br>
+  ③ 或者——直接跳到 Phase 4，理解这些现象背后的原因
+</div>
+
+<hr>
+<h2>✅ 这节课你学会了</h2>
+
+<p>
+  <code>generate()</code> 函数 = 前向传播 → 采样 → 拼接 → 循环。<br>
+  Temperature 控制「保守 vs 创意」，Top-K 过滤噪声，Top-P 动态适应。<br>
+  <strong>你的模型现在能从 prompt 生成文本了。</strong>
+</p>
+
+<p>Phase 3 完成！你拥有了训练 GPT 的完整流程：数据 → 模型 → 训练 → 生成。</p>
+
+<nav class="lesson-nav">
+  <a href="0015-cloud-training.html">← 上一课：云端训练</a>
+  <a href="0017-param-scaling.html">下一课：参数计算与模型缩放 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>第 16 课 · 文本生成实战 —— 从 logits 到文字的最后一步。Phase 3 终点 🏁</p>
+</footer>
+
+<script>
+const GEN_STEPS = [
+  { picked: '的', candidates: [['的',0.42],['，',0.18],['是',0.11], ['将',0.08],['。',0.05],['发展',0.04]] },
+  { picked: '未来', candidates: [['未来',0.38],['发展',0.22],['前景',0.15], ['趋势',0.10],['方向',0.07],['可能性',0.03]] },
+  { picked: '充满', candidates: [['充满',0.35],['在于',0.20],['令人',0.14], ['需要',0.11],['值得',0.08],['不仅',0.05]] },
+  { picked: '希望', candidates: [['希望',0.40],['机遇',0.18],['挑战',0.15], ['未知',0.10],['可能',0.07],['想象',0.04]] },
+  { picked: '，', candidates: [['，',0.45],['。',0.25],['与',0.10], ['但',0.08],['也',0.05],['而',0.03]] },
+  { picked: '但', candidates: [['但',0.30],['人',0.22],['我们',0.16], ['同时',0.12],['也',0.09],['这',0.05]] },
+  { picked: '也', candidates: [['也',0.28],['需要',0.23],['面临',0.18], ['应该',0.12],['必须',0.08],['将',0.04]] },
+  { picked: '充满', candidates: [['充满',0.33],['面临',0.20],['有着',0.17], ['需要',0.13],['值得',0.08],['存在',0.04]] },
+];
+
+let genStep = 0;
+let genText = '人工智能';
+
+function stepGeneration() {
+  if (genStep >= GEN_STEPS.length) return;
+
+  const step = GEN_STEPS[genStep];
+  genText += step.picked;
+  genStep++;
+
+  document.getElementById('gen-text-display').textContent = genText;
+
+  if (genStep < GEN_STEPS.length) {
+    const next = GEN_STEPS[genStep];
+    let html = '<div style="font-size:0.78rem;font-weight:600;margin-bottom:0.3rem;">模型预测下一个 token 的概率分布：</div>';
+    for (const [tok, prob] of next.candidates) {
+      const pct = (prob * 100).toFixed(0);
+      const color = tok === next.picked ? '#66bb6a' : '#90caf9';
+      html += '<div style="display:flex;align-items:center;gap:0.3rem;margin:0.15rem 0;font-size:0.78rem;">';
+      html += '<span style="width:3rem;text-align:right;font-weight:600;">' + tok + '</span>';
+      html += '<span style="flex:1;height:14px;background:var(--bg);border-radius:3px;overflow:hidden;border:1px solid var(--rule);">';
+      html += '<span style="display:inline-block;height:100%;width:' + pct + '%;background:' + color + ';border-radius:2px;"></span></span>';
+      html += '<span style="width:2.5rem;font-family:JetBrains Mono,Consolas,monospace;font-size:0.7rem;">' + prob.toFixed(2) + '</span>';
+      html += '</div>';
+    }
+    html += '<div style="font-size:0.75rem;color:var(--muted);margin-top:0.4rem;">🎲 按分布随机采样 → 选中「<strong>' + next.picked + '</strong>」</div>';
+    document.getElementById('gen-candidates-display').innerHTML = html;
+  } else {
+    document.getElementById('gen-candidates-display').innerHTML = '<div style="color:var(--muted);font-size:0.8rem;">生成完成！最终文本：<br><strong>' + genText + '</strong></div>';
+  }
+}
+
+function resetGeneration() {
+  genStep = 0;
+  genText = '人工智能';
+  document.getElementById('gen-text-display').textContent = genText;
+  document.getElementById('gen-candidates-display').innerHTML = '<div style="color:var(--muted);font-size:0.8rem;">点击「下一步」开始逐 token 生成…</div>';
+}
+</script>
+</body>
+</html>

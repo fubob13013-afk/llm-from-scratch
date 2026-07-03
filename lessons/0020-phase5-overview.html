@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase 5 · 进阶方向总览</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .direction-card { margin:1.25rem 0; padding:1.25rem; border:2px solid var(--rule); border-radius:10px; background:var(--code-bg); }
+  .direction-card h3 { margin:0 0 0.5rem; }
+  .direction-card .tags { display:flex; flex-wrap:wrap; gap:0.3rem; margin:0.5rem 0; }
+  .direction-card .tags span { padding:0.15rem 0.5rem; border-radius:3px; font-size:0.73rem; font-weight:600; }
+  .tag-a { background:#e3f2fd; color:#1565c0; }
+  .tag-b { background:#e8f5e9; color:#2e7d32; }
+  .tag-c { background:#fff3e0; color:#e65100; }
+  .tag-d { background:#fce4ec; color:#c62828; }
+  @media (prefers-color-scheme:dark) {
+    .tag-a { background:#0d2137; color:#90caf9; }
+    .tag-b { background:#1b3a1b; color:#a5d6a7; }
+    .tag-c { background:#3e2723; color:#ffcc80; }
+    .tag-d { background:#3e1a1a; color:#ef9a9a; }
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🚀 Phase 5 · 进阶方向总览</h1>
+
+<p>
+  恭喜！你已经完成了从「零基础」到「能写 GPT 代码 + 能训练 + 能评估」的完整旅程。
+  Phase 5 的四个方向不是必学——<strong>按你的兴趣和目标任选 1~2 个深入</strong>。
+</p>
+
+<!-- 方向 A -->
+<div class="direction-card">
+  <h3>方向 A：微调与对齐</h3>
+  <div class="tags"><span class="tag-a">SFT</span><span class="tag-a">RLHF</span><span class="tag-a">DPO</span><span class="tag-a">LoRA</span></div>
+
+  <p><strong>解决什么问题？</strong> Phase 1-4 训练的是 Base Model（基础模型）——它只会「续写文本」，不会「回答问题」。
+  ChatGPT 的回答能力来自<strong>微调和对齐</strong>。</p>
+
+  <h4>A1 · SFT（监督微调）</h4>
+  <p>用几千条「人类写的优质对话」继续训练模型。Base Model 学会「用户问→我答」的格式。
+  数据量不大（几千到几万条），但质量要求高。</p>
+
+  <h4>A2 · RLHF / DPO（对齐人类偏好）</h4>
+  <p>SFT 后模型会回答问题了，但回答可能不安全、不有帮助、不符合价值观。
+  RLHF（从人类反馈中强化学习）让人类标注「哪个回答更好」来进一步调整模型。
+  <strong>DPO</strong> 是 RLHF 的简化版——不需要训练奖励模型，直接优化，近年来更流行。</p>
+
+  <h4>A3 · LoRA / QLoRA（低秩适配）</h4>
+  <p>不想更新全部 124M 参数？LoRA 在原始权重旁边加小矩阵只训练这小部分——
+  参数减少 99% 以上，效果接近全参数微调。<strong>QLoRA</strong> 更进一步：用 4-bit 量化 + LoRA，7B 模型在单个消费级 GPU（24GB）上就能微调。</p>
+
+  <div class="callout">
+    <strong>🎯 为什么 Bob 可能需要这个方向？</strong>
+    如果你想做一个「离线陪伴机器人」——一个能聊天、有性格的 AI——这个方向是必经之路。
+    Base Model（L12 的 GPT-2）只会续写，需要 SFT 才能对话。
+  </div>
+</div>
+
+<!-- 方向 B -->
+<div class="direction-card">
+  <h3>方向 B：量化与部署</h3>
+  <div class="tags"><span class="tag-b">INT8</span><span class="tag-b">INT4</span><span class="tag-b">llama.cpp</span><span class="tag-b">Ollama</span></div>
+
+  <p><strong>解决什么问题？</strong> 124M 的模型文件（FP32 格式）约 500MB——但 7B 的模型就是 28GB。
+  量化把 32 位浮点数压成 8 位甚至 4 位整数，<strong>模型缩小 4-8 倍，推理加速 2-4 倍</strong>。</p>
+
+  <h4>B1 · 量化原理</h4>
+  <p>核心思想：神经网络参数不需要 32 位的精度。把 FP32 → INT8（8 位），精度损失很小。
+  如果进一步量化到 INT4（4 位），每个参数只占半个 byte——7B 模型从 28GB → ~3.5GB。</p>
+
+  <h4>B2 · llama.cpp / Ollama</h4>
+  <p>在普通电脑（甚至树莓派）上跑 LLM 的终极工具。llama.cpp 用 C++ 优化推理，支持 CPU-only 运行。
+  Ollama 是 llama.cpp 的桌面版——安装后一行命令就能在本地跑各种开源模型。</p>
+
+  <div class="callout">
+    <strong>🎯 为什么 Bob 可能需要这个方向？</strong>
+    如果你想做一个能<strong>本地运行</strong>、不依赖云端的 AI 助手——这个方向教你做到。
+    7B 模型量化后可以在 16GB 内存的笔记本上运行。
+  </div>
+</div>
+
+<!-- 方向 C -->
+<div class="direction-card">
+  <h3>方向 C：多模态</h3>
+  <div class="tags"><span class="tag-c">CLIP</span><span class="tag-c">Diffusion</span><span class="tag-c">DiT</span><span class="tag-c">语音</span></div>
+
+  <p><strong>解决什么问题？</strong> 让模型不仅能读文字，还能<strong>看懂图片、生成视频、听懂语音</strong>。</p>
+
+  <h4>C1 · CLIP — 图文对齐</h4>
+  <p>训练一个模型把「图片」和「描述图片的文字」映射到同一个向量空间。
+  之后就可以用文字搜图片、用图片搜文字——这是所有多模态模型的基础。</p>
+
+  <h4>C2 · Diffusion + DiT — 图像/视频生成</h4>
+  <p>Stable Diffusion（文生图）和 Sora/即梦（文生视频）的核心技术。
+  与 LLM 的 Transformer 架构同根同源——DiT（Diffusion Transformer）就是把 Transformer Block 用在图像生成上。</p>
+
+  <h4>C3 · 语音对话</h4>
+  <p>ASR（语音→文字）+ LLM + TTS（文字→语音）= 一个能说能听的 AI 助手。</p>
+
+  <div class="callout">
+    <strong>🎯 为什么 Bob 可能需要这个方向？</strong>
+    Bob 在用即梦做 AI 视频创作。理解 Diffusion/DiT 的底层原理，能让你更好地控制视频生成。
+  </div>
+</div>
+
+<!-- 方向 D -->
+<div class="direction-card">
+  <h3>方向 D：Agent 与工具使用</h3>
+  <div class="tags"><span class="tag-d">Function Calling</span><span class="tag-d">RAG</span><span class="tag-d">Memory</span></div>
+
+  <p><strong>解决什么问题？</strong> 基础 LLM 只知道训练数据里的内容，不会查资料、不会用工具。
+  Agent 给模型装上「手脚」——能搜索网页、调用 API、读写文件。</p>
+
+  <h4>D1 · Function Calling（工具调用）</h4>
+  <p>让模型输出结构化指令（如 <code>{"tool": "search", "query": "今天北京天气"}</code>），
+  外部程序执行后把结果还给模型继续回答。</p>
+
+  <h4>D2 · RAG（检索增强生成）</h4>
+  <p>模型回答前先去知识库检索相关文档，把文档内容作为上下文拼进 prompt。
+  <strong>解决幻觉问题</strong>的核心手段——fact 来自检索结果，不靠模型记忆。</p>
+
+  <h4>D3 · Memory（记忆系统）</h4>
+  <p>让模型在跨多轮对话中记住用户的重要信息。技术路线：向量数据库存储对话摘要 → 检索相关记忆 → 嵌入 prompt。</p>
+
+  <div class="callout">
+    <strong>🎯 为什么 Bob 可能需要这个方向？</strong>
+    「离线陪伴机器人」需要：记住你的偏好（Memory）+ 能查天气/新闻（Function Calling）+ 回答基于事实（RAG）。
+    这三个加起来 = 一个能真正帮到你的 AI 助手。
+  </div>
+</div>
+
+<hr>
+<h2>推荐学习路径</h2>
+
+<p>根据 Bob 的「离线陪伴机器人」目标，推荐优先级：</p>
+
+<ol>
+  <li><strong>方向 A（微调）</strong> — 让模型从「续写」变成「对话」，这是起点</li>
+  <li><strong>方向 D（Agent）</strong> — 加上 RAG 和 Memory，让对话有事实依据和个人记忆</li>
+  <li><strong>方向 B（量化部署）</strong> — 把模型压缩到能在自己电脑上跑</li>
+  <li><strong>方向 C（多模态）</strong> — 加上视觉/语音能力（这个最复杂，放最后）</li>
+</ol>
+
+<nav class="lesson-nav">
+  <a href="0019-evaluation.html">← 上一课：评估方法</a>
+  <a href="../index.html">🏠 回到树屋总览</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>Phase 5 · 进阶方向总览 —— 四条路，任选其一。从「入门」到「专精」的分岔口 🌳</p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第14课 · 训练循环实战</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .training-log { font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace; font-size:0.78rem; background:var(--code-bg); padding:1rem; border-radius:8px; line-height:1.8; max-height:24rem; overflow-y:auto; margin:1rem 0; white-space:pre-wrap; }
+  .loss-chart { width:100%; height:200px; background:var(--bg); border:1px solid var(--rule); border-radius:6px; position:relative; overflow:hidden; margin:1rem 0; }
+  .loss-chart canvas { width:100%; height:100%; }
+
+  .code-annotated { margin:1rem 0; }
+  .code-annotated .line { display:flex; gap:0.75rem; font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace; font-size:0.8rem; line-height:1.7; }
+  .code-annotated .line .code { flex:0 0 auto; min-width:400px; color:var(--text); }
+  .code-annotated .line .note { color:var(--muted); font-family:"Source Serif 4","Noto Serif CJK SC",serif; font-size:0.78rem; }
+
+  .experiment { margin:1.5rem 0; border:2px solid var(--rule); border-radius:10px; padding:1.25rem; background:var(--code-bg); }
+
+  @media (max-width:640px) {
+    .code-annotated .line { flex-direction:column; gap:0.1rem; }
+    .code-annotated .line .code { min-width:auto; }
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🔄 第14课 · 训练循环实战</h1>
+
+<h2>训练 = 反复做五件事</h2>
+
+<p>
+  L6 讲了你训练循环的原理——前向→损失→反向→更新。L12 有了模型，L13 有了数据。
+  现在把一切串起来，写出能真正<strong>降低 loss</strong> 的训练脚本。
+</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">取一个 batch</div><div class="sub">inputs, targets</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">前向传播</div><div class="sub">model(inputs) → logits</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">算损失</div><div class="sub">cross_entropy(logits, targets)</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">反向传播</div><div class="sub">loss.backward()</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">更新参数</div><div class="sub">optimizer.step()</div></div>
+</div>
+
+<p>循环第①步。训练就是这五步的无限重复——直到 loss 不再下降。</p>
+
+<!-- ====== 概念一 ====== -->
+<h2>概念一：loss 计算 —— 模型错得有多离谱</h2>
+
+<p>
+  L6 讲过的交叉熵损失（Cross-Entropy Loss）——衡量预测概率分布和正确答案之间的差距。
+  PyTorch 自带：
+</p>
+
+<pre><code>loss_fn = nn.CrossEntropyLoss()
+
+# logits: (batch, seq_len, vocab_size)  — 模型输出的原始分数
+# targets: (batch, seq_len)              — 正确答案的 token ID
+loss = loss_fn(logits.view(-1, vocab_size), targets.view(-1))
+
+# .view(-1, vocab_size) 把 batch 和 seq_len 两维合并
+# 因为 CrossEntropyLoss 期望输入是 (N, classes) 和 (N,)
+# N = batch × seq_len = 所有位置一起算</code></pre>
+
+<!-- ====== 概念二 ====== -->
+<h2>概念二：优化器 —— 谁在「推」参数</h2>
+
+<p>
+  你可能还记得 L6 的梯度下降：参数 = 参数 - 学习率 × 梯度。
+  PyTorch 的优化器自动做这件事，而且做得更好（AdamW 是目前最主流的选择）：
+</p>
+
+<pre><code>optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=6e-4,              # 学习率
+    betas=(0.9, 0.95),    # 动量参数（来自 GPT-3 论文）
+    weight_decay=0.1      # 权重衰减（L2 正则化）
+)</code></pre>
+
+<table>
+  <tr><th>优化器</th><th>特点</th></tr>
+  <tr><td>SGD</td><td>最基础，每个参数统一学习率</td></tr>
+  <tr><td>Adam</td><td>每个参数自适应学习率 + 动量</td></tr>
+  <tr><td><strong>AdamW</strong></td><td>Adam + 正确的权重衰减，训练大模型首选</td></tr>
+</table>
+
+<!-- ====== 概念三 ====== -->
+<h2>概念三：学习率调度 —— 从大火到小火慢炖</h2>
+
+<p>
+  训练开始时用大学习率快速进步，后期用小学习率精细调整——像煮汤一样，先大火烧开，再小火慢炖。
+</p>
+
+<pre><code># Warmup：前 100 步从 0 线性增长到 lr（防止一开始梯度不准把参数拽飞）
+# Cosine Decay：之后按余弦曲线平滑下降到目标学习率
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer, T_max=1000, eta_min=1e-6
+)</code></pre>
+
+<!-- ====== 概念四 ====== -->
+<h2>概念四：梯度裁剪 —— 防止「砰」一下参数飞走</h2>
+
+<p>
+  有时某一个 batch 恰好包含很难预测的文本，梯度会异常大——如果直接用它更新，参数会被「炸」到一个离谱的位置。
+  <strong>梯度裁剪</strong>就是给梯度设一个上限：
+</p>
+
+<pre><code># 如果梯度的「模长」超过 1.0，就把它缩回 1.0
+torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)</code></pre>
+
+<p>这个操作在 <code>loss.backward()</code> 和 <code>optimizer.step()</code> 之间执行。</p>
+
+<!-- ====== 完整代码 ====== -->
+<h2>完整训练脚本</h2>
+
+<pre><code>import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+import time
+
+def train_one_epoch(model, dataloader, optimizer, loss_fn, device='cpu'):
+    """训练一个 epoch（遍历全部数据一次）"""
+    model.train()
+    total_loss = 0
+    total_tokens = 0
+    start = time.time()
+
+    for step, (inputs, targets) in enumerate(dataloader):
+        inputs = inputs.to(device)        # 搬到 GPU（如果有的话）
+        targets = targets.to(device)
+
+        # ---- 核心五步 ----
+        optimizer.zero_grad()             # ① 清空上一步的梯度
+        logits = model(inputs)            # ② 前向传播
+        loss = loss_fn(                    # ③ 算损失
+            logits.view(-1, logits.size(-1)),
+            targets.view(-1)
+        )
+        loss.backward()                   # ④ 反向传播（自动求梯度）
+        torch.nn.utils.clip_grad_norm_(   # 裁剪梯度
+            model.parameters(), 1.0)
+        optimizer.step()                  # ⑤ 更新参数
+
+        total_loss += loss.item()
+        total_tokens += inputs.numel()
+
+        # 每 100 步打印一次进度
+        if step % 100 == 0:
+            print(f"  Step {step:5d} | loss {loss.item():.4f}")
+
+    elapsed = time.time() - start
+    avg_loss = total_loss / len(dataloader)
+    tokens_per_sec = total_tokens / elapsed
+    return avg_loss, tokens_per_sec
+
+
+@torch.no_grad()  # 评估时不需要计算梯度
+def evaluate(model, dataloader, loss_fn, device='cpu'):
+    """在验证集上评估模型"""
+    model.eval()
+    total_loss = 0
+
+    for inputs, targets in dataloader:
+        inputs, targets = inputs.to(device), targets.to(device)
+        logits = model(inputs)
+        loss = loss_fn(
+            logits.view(-1, logits.size(-1)),
+            targets.view(-1)
+        )
+        total_loss += loss.item()
+
+    return total_loss / len(dataloader)
+
+
+def train(model, train_loader, val_loader, epochs=10, lr=6e-4, device='cpu'):
+    """完整训练流程"""
+    model = model.to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=epochs * len(train_loader))
+    loss_fn = nn.CrossEntropyLoss()
+
+    best_val_loss = float('inf')
+
+    for epoch in range(epochs):
+        print(f"\n{'='*50}")
+        print(f"Epoch {epoch+1}/{epochs}")
+
+        # 训练
+        train_loss, tps = train_one_epoch(
+            model, train_loader, optimizer, loss_fn, device)
+        scheduler.step()
+
+        # 验证
+        val_loss = evaluate(model, val_loader, loss_fn, device)
+
+        print(f"Train loss: {train_loss:.4f} | Val loss: {val_loss:.4f} | {tps:.0f} tok/s")
+
+        # 保存最好的模型
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'val_loss': val_loss,
+            }, 'best_model.pt')
+            print(f"  ✅ 保存最佳模型 (val_loss={val_loss:.4f})")
+
+    print(f"\n训练完成！最佳验证 loss: {best_val_loss:.4f}")</code></pre>
+
+<!-- 训练模拟器 -->
+<div class="experiment">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：微型训练模拟器</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    在浏览器里模拟一个小模型训练 50 步的过程。每次迭代模型预测随机 token，loss 从 ~11（随机猜测的基线）逐步下降。<br>
+    <small>真实训练比这慢得多——但 loss 下降的模式是一样的。</small>
+  </p>
+  <div style="margin-bottom:0.8rem;">
+    <label style="font-size:0.78rem;font-weight:600;">学习率:</label>
+    <input type="range" id="ts-lr" min="0.001" max="0.1" step="0.001" value="0.01" oninput="resetTrainSim()">
+    <span id="ts-lr-disp" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.8rem;">0.010</span>
+    <button onclick="runTrainSim()" style="padding:0.35rem 0.8rem;font-size:0.85rem;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;margin-left:1rem;">▶ 开始训练</button>
+    <button onclick="resetTrainSim()" style="padding:0.35rem 0.8rem;font-size:0.85rem;font-weight:600;border:1px solid var(--accent);border-radius:4px;background:var(--bg);color:var(--accent);cursor:pointer;margin-left:0.4rem;">↺ 重置</button>
+  </div>
+  <canvas id="loss-canvas" width="640" height="200" style="width:100%;max-width:640px;border:1px solid var(--rule);border-radius:6px;background:var(--bg);"></canvas>
+  <div id="train-sim-log" class="training-log" style="max-height:10rem;">点击「开始训练」查看训练日志…</div>
+</div>
+
+<!-- ====== 概念五 ====== -->
+<h2>概念五：Checkpoint —— 学会「存档」</h2>
+
+<p>
+  训练一个模型可能需要几小时甚至几天。如果中途断电或者想从上次中断的地方继续，就需要<strong>checkpoint</strong>。
+</p>
+
+<pre><code># --- 保存 ---
+torch.save({
+    'epoch': epoch,                          # 当前轮次
+    'model_state_dict': model.state_dict(),  # 模型参数
+    'optimizer_state_dict': optimizer.state_dict(),  # 优化器状态
+    'val_loss': val_loss,                    # 当前验证损失
+}, 'checkpoint.pt')
+
+# --- 恢复 ---
+checkpoint = torch.load('checkpoint.pt')
+model.load_state_dict(checkpoint['model_state_dict'])
+optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+start_epoch = checkpoint['epoch'] + 1       # 从下一轮继续</code></pre>
+
+<div class="callout">
+  <strong>⚠️ 为什么连 optimizer 也要保存？</strong><br>
+  Adam/AdamW 优化器内部有每个参数的「动量」状态（可以理解为每个参数的学习速度历史记录）。
+  如果不保存这个，恢复训练时优化器从头开始重新积累动量——相当于换了个新教练，浪费了之前的「经验」。
+</div>
+
+<!-- ====== 总结 ====== -->
+<hr>
+<h2>✅ 这节课你学会了</h2>
+
+<table>
+  <tr><th>操作</th><th>代码</th><th>位置（在五步中）</th></tr>
+  <tr><td>清空梯度</td><td><code>optimizer.zero_grad()</code></td><td>①</td></tr>
+  <tr><td>前向传播</td><td><code>logits = model(inputs)</code></td><td>②</td></tr>
+  <tr><td>计算损失</td><td><code>loss_fn(logits, targets)</code></td><td>③</td></tr>
+  <tr><td>反向传播</td><td><code>loss.backward()</code></td><td>④</td></tr>
+  <tr><td>裁剪梯度</td><td><code>clip_grad_norm_(..., 1.0)</code></td><td>④½</td></tr>
+  <tr><td>更新参数</td><td><code>optimizer.step()</code></td><td>⑤</td></tr>
+  <tr><td>学习率调度</td><td><code>scheduler.step()</code></td><td>每 epoch 后</td></tr>
+  <tr><td>保存检查点</td><td><code>torch.save({...}, 'best.pt')</code></td><td>验证后</td></tr>
+</table>
+
+<p>
+  <strong>你现在有了一套完整的训练脚本。</strong>下一课（L15）教你把代码放到云端 GPU 上跑——
+  不用自己的显卡，免费训练你的第一个 GPT 模型。
+</p>
+
+<nav class="lesson-nav">
+  <a href="0013-data-preparation.html">← 上一课：数据准备</a>
+  <a href="0015-cloud-training.html">下一课：云端训练 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>
+    第 14 课 · 训练循环实战 —— 五步循环 + 学习率调度 + 梯度裁剪 + checkpoint。
+    <strong>训练就像做饭：大火烧开（warmup），中火熬煮（训练），小火慢炖（cosine decay），记得存档（checkpoint）。</strong>
+  </p>
+</footer>
+
+<script>
+// ========== 训练模拟器 ==========
+let simLosses = [];
+
+function resetTrainSim() {
+  simLosses = [];
+  const canvas = document.getElementById('loss-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  document.getElementById('train-sim-log').textContent = '点击「开始训练」查看训练日志…';
+  const lr = parseFloat(document.getElementById('ts-lr').value);
+  document.getElementById('ts-lr-disp').textContent = lr.toFixed(3);
+}
+
+function drawLossChart() {
+  const canvas = document.getElementById('loss-canvas');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (simLosses.length < 2) return;
+
+  const margin = {top:20, right:30, bottom:30, left:50};
+  const px = margin.left, py = margin.top;
+  const pw = w - margin.left - margin.right;
+  const ph = h - margin.top - margin.bottom;
+
+  const maxVal = Math.max(...simLosses) * 1.1;
+  const minVal = Math.min(...simLosses) * 0.9;
+
+  // Grid
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 5; i++) {
+    const y = py + (i / 5) * ph;
+    ctx.beginPath();
+    ctx.moveTo(px, y);
+    ctx.lineTo(px + pw, y);
+    ctx.stroke();
+    const val = maxVal - (i / 5) * (maxVal - minVal);
+    ctx.fillStyle = '#999';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(val.toFixed(2), 2, y + 3);
+  }
+
+  // Axes
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px, py + ph);
+  ctx.lineTo(px + pw, py + ph);
+  ctx.stroke();
+
+  // Loss curve
+  ctx.strokeStyle = '#cc4444';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < simLosses.length; i++) {
+    const x = px + (i / (simLosses.length - 1)) * pw;
+    const y = py + ((maxVal - simLosses[i]) / (maxVal - minVal)) * ph;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#666';
+  ctx.font = '11px sans-serif';
+  ctx.fillText('步数', px + pw/2 - 15, h - 5);
+  ctx.save();
+  ctx.translate(10, py + ph/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText('loss', 0, 0);
+  ctx.restore();
+}
+
+function runTrainSim() {
+  const lr = parseFloat(document.getElementById('ts-lr').value);
+  document.getElementById('ts-lr-disp').textContent = lr.toFixed(3);
+
+  simLosses = [];
+  // Simulate loss decreasing from ~11 (random baseline) toward 0, with noise
+  // log(vocab_size=50257) ≈ 10.8 — this is the baseline loss for random prediction
+  let currentLoss = 10.8;
+  let log = '';
+
+  const interval = setInterval(() => {
+    if (simLosses.length >= 50) {
+      clearInterval(interval);
+      log += '\n✅ 训练完成！50 步 loss 从 10.80 → ' + currentLoss.toFixed(2);
+      document.getElementById('train-sim-log').textContent = log;
+      return;
+    }
+
+    const step = simLosses.length;
+    // Exponential decay + noise
+    const targetLoss = 10.8 * Math.exp(-step * lr * 8);
+    const noise = (Math.random() - 0.5) * 0.3 * Math.exp(-step * 0.05);
+    currentLoss = targetLoss + noise;
+
+    simLosses.push(currentLoss);
+
+    if (step % 10 === 0) {
+      log += 'Step ' + String(step).padStart(3) + ' | loss: ' + currentLoss.toFixed(4) + '\n';
+      document.getElementById('train-sim-log').textContent = log;
+    }
+
+    drawLossChart();
+  }, 80);
+}
+
+document.getElementById('ts-lr').addEventListener('input', function() {
+  document.getElementById('ts-lr-disp').textContent = parseFloat(this.value).toFixed(3);
+});
+
+resetTrainSim();
+</script>
+</body>
+</html>
