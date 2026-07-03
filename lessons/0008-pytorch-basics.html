@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第8课 · PyTorch 基础 —— 张量是什么？</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  /* 张量可视化 */
+  .tensor-viz {
+    margin: 1rem 0;
+    padding: 1.25rem;
+    background: var(--code-bg);
+    border-radius: 8px;
+  }
+  .tensor-grid {
+    display: inline-grid;
+    gap: 2px;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.82rem;
+  }
+  .tensor-cell {
+    width: 3rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    color: var(--text);
+    transition: background 0.15s;
+  }
+  .tensor-cell.highlight { background: #fff3cd; color: #856404; border-color: #ffc107; }
+  @media (prefers-color-scheme: dark) {
+    .tensor-cell.highlight { background: #4a3a0a; color: #ffd54f; border-color: #b8860b; }
+  }
+
+  .shape-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .shape-controls label {
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .shape-controls input {
+    width: 4rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.9rem;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+    text-align: center;
+  }
+  .shape-controls button {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.85rem;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-weight: 600;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .shape-controls button:hover { opacity: 0.85; }
+  .shape-info {
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 0.5rem;
+  }
+
+  /* 矩阵乘法可视化 */
+  .matmul-viz {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: center;
+    margin: 1.25rem 0;
+  }
+  .matmul-viz table {
+    width: auto;
+    margin: 0;
+    border-collapse: collapse;
+  }
+  .matmul-viz td {
+    width: 2.8rem;
+    height: 2.5rem;
+    text-align: center;
+    font-family: "JetBrains Mono", Consolas, monospace;
+    font-size: 0.8rem;
+    border: 1px solid var(--rule);
+    padding: 0;
+  }
+  .matmul-viz .op-symbol {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--muted);
+  }
+
+  /* 自动求导模拟器 */
+  .autograd-demo {
+    margin: 1.25rem 0;
+    padding: 1.25rem;
+    background: var(--code-bg);
+    border-radius: 8px;
+  }
+  .comp-graph {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    justify-content: center;
+    margin: 1rem 0;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.85rem;
+  }
+  .comp-node {
+    padding: 0.5rem 0.8rem;
+    border: 2px solid var(--rule);
+    border-radius: 8px;
+    background: var(--bg);
+    text-align: center;
+    min-width: 3rem;
+    transition: all 0.3s;
+  }
+  .comp-node.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(204, 68, 68, 0.15);
+  }
+  .comp-node .node-grad {
+    font-size: 0.7rem;
+    color: var(--accent);
+    margin-top: 0.2rem;
+  }
+  .comp-arrow {
+    color: var(--faint);
+    font-size: 1.2rem;
+  }
+
+  /* 代码标注 */
+  .code-annotated {
+    margin: 1rem 0;
+  }
+  .code-annotated .line {
+    display: flex;
+    gap: 0.75rem;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+  }
+  .code-annotated .line .code {
+    flex: 0 0 auto;
+    min-width: 320px;
+    color: var(--text);
+  }
+  .code-annotated .line .note {
+    color: var(--muted);
+    font-family: "Source Serif 4", "Noto Serif CJK SC", serif;
+    font-size: 0.78rem;
+  }
+
+  /* Colab 链接按钮 */
+  .colab-btn {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: var(--accent);
+    color: #fff !important;
+    border: none;
+    border-bottom: none !important;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: opacity 0.2s;
+  }
+  .colab-btn:hover { opacity: 0.85; }
+
+  @media (max-width: 640px) {
+    .matmul-viz { flex-direction: column; }
+    .code-annotated .line { flex-direction: column; gap: 0.1rem; }
+    .code-annotated .line .code { min-width: auto; }
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🧮 第8课 · PyTorch 基础 —— 张量是什么？</h1>
+
+<!-- ====== 导入 ====== -->
+<h2>为什么需要 PyTorch？</h2>
+
+<p>
+  Phase 1 的 7 节课，你已经<strong>看懂</strong>了 Transformer 的每一个零件：Embedding 查表、
+  Q/K/V 注意力、残差连接、梯度下降……但「看懂」和「写出来」之间还有一道坎——
+  你需要一个工具，把数学概念翻译成能跑的代码。
+</p>
+
+<p>
+  <strong>PyTorch 就是这个翻译官。</strong> 它提供了三样东西，对应我们接下来的所有工作：
+</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">🧱 张量 (Tensor)</div><div class="sub">存数据、做运算</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">🏗️ nn 模块</div><div class="sub">搭积木（Linear, Embedding…）</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">🪄 autograd</div><div class="sub">自动求梯度</div></div>
+</div>
+
+<p>
+  这节课我们逐一搞定这三样。你会发现，<strong>PyTorch 里的每个操作，都是 Phase 1 某个概念的代码化身</strong>。
+</p>
+
+<!-- ====== 概念一：张量 ====== -->
+<h2>概念一：张量（Tensor）= 多维数组</h2>
+
+<h3>从标量到张量：一步步升级维度</h3>
+
+<p>
+  在 Python 里你用过数字、列表。张量就是这些概念的<strong>统一升级版</strong>——它给数据加上了「形状（shape）」的概念，而且能一次性处理整个数组。
+</p>
+
+<table>
+  <tr><th>数学名字</th><th>Python 例子</th><th>张量 Shape</th><th>比喻</th></tr>
+  <tr><td><strong>标量</strong> (Scalar)</td><td><code>3.14</code></td><td><code>()</code> 或 <code>(1,)</code></td><td>一个点</td></tr>
+  <tr><td><strong>向量</strong> (Vector)</td><td><code>[1, 2, 3]</code></td><td><code>(3,)</code></td><td>一条线（3 个点排成排）</td></tr>
+  <tr><td><strong>矩阵</strong> (Matrix)</td><td><code>[[1,2],[3,4]]</code></td><td><code>(2, 2)</code></td><td>一个面（2 行 × 2 列）</td></tr>
+  <tr><td><strong>3D 张量</strong></td><td><code>[[[1],[2]],[[3],[4]]]</code></td><td><code>(2, 2, 1)</code></td><td>一个方块（面叠起来）</td></tr>
+  <tr><td><strong>N-D 张量</strong></td><td>……</td><td><code>(B, L, D)</code></td><td>更高维（想象不出来但算得动）</td></tr>
+</table>
+
+<div class="callout">
+  <strong>💡 关键直觉</strong>
+  Shape 就是从外到内数「有几层」。<code>(2, 3, 4)</code> 读作：「最外层 2 个矩阵，每个矩阵 3 行，每行 4 个数」。
+  在 LLM 里最常见的张量 shape 是 <code>(batch, seq_len, d_model)</code> —— 批次 × 序列长度 × 向量维度。
+</div>
+
+<!-- 交互：张量形状探索器 -->
+<div class="tensor-viz">
+  <h4>🔬 动手试试：张量形状探索器</h4>
+  <p style="font-size:0.88rem; color:var(--muted);">调整维度参数，观察张量的结构变化。每个小格子代表张量里的一个数。</p>
+  <div class="shape-controls">
+    <label>维度1:</label><input type="number" id="dim1" value="3" min="1" max="8" onchange="renderTensor()">
+    <label>维度2:</label><input type="number" id="dim2" value="4" min="1" max="8" onchange="renderTensor()">
+    <label>维度3:</label><input type="number" id="dim3" value="1" min="1" max="4" onchange="renderTensor()">
+    <button onclick="renderTensor()">刷新</button>
+  </div>
+  <div id="tensor-display"></div>
+  <div class="shape-info" id="tensor-shape-info">shape: (3, 4)</div>
+</div>
+
+<p>
+  在 PyTorch 里创建张量和创建 Python 列表一样简单，但多了一个「形状」的意识：
+</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">x = torch.randn(2, 3, 4)</span><span class="note">创建一个 shape=(2,3,4) 的张量，里面是随机数</span></div>
+  <div class="line"><span class="code">x.shape  →  torch.Size([2, 3, 4])</span><span class="note">.shape 告诉你张量的尺寸，和 list 的 len() 类似但更强</span></div>
+  <div class="line"><span class="code">x[0]    →  shape (3, 4) 的矩阵</span><span class="note">取第一个「样本」，得到一个矩阵</span></div>
+  <div class="line"><span class="code">x[0, 1] →  shape (4,) 的向量</span><span class="note">取第一个样本的第二行</span></div>
+</div>
+
+<!-- ====== 概念二：张量运算 ====== -->
+<h2>概念二：张量运算 —— 矩阵乘法是核心</h2>
+
+<p>
+  张量上的运算有很多，但在 Transformer 里最核心的就三个：
+</p>
+
+<dl>
+  <dt><code>torch.randn(d1, d2, …)</code> — 生成随机张量</dt>
+  <dd>生成服从标准正态分布（均值0，方差1）的随机数。初始化模型参数时用它。</dd>
+
+  <dt><code>torch.matmul(A, B)</code> — 矩阵乘法</dt>
+  <dd>这是整个 Transformer 里出现次数最多的运算。Q×K<sup>T</sup>、注意力分数×V、
+    W<sup>Q</sup>×输入……全都是矩阵乘法。理解了它，就理解了计算的核心。</dd>
+
+  <dt><code>torch.softmax(x, dim=-1)</code> — Softmax 归一化</dt>
+  <dd>把任意一串数变成「概率分布」（和为 1）。L4 注意力里的核心操作，一模一样。</dd>
+</dl>
+
+<!-- 交互：矩阵乘法可视化 -->
+<div class="tensor-viz">
+  <h4>🔬 动手试试：矩阵乘法可视化</h4>
+  <p style="font-size:0.88rem; color:var(--muted);">
+    下面两个矩阵相乘（A 的列数 = B 的行数）。把鼠标悬停在结果矩阵的格子上，看它是哪两个向量点乘出来的。
+  </p>
+  <div id="matmul-display"></div>
+  <p style="font-size:0.8rem; color:var(--muted); margin-top:0.5rem;" id="matmul-formula"></p>
+</div>
+
+<div class="callout">
+  <strong>🔗 回顾 L4：注意力里的矩阵乘法</strong>
+  还记得 <code>Attention(Q,K,V) = softmax(QK<sup>T</sup>/√d<sub>k</sub>)V</code> 吗？<br>
+  - <code>Q @ K.T</code> 就是矩阵乘法<br>
+  - <code>softmax(…)</code> 就是让每行和为 1<br>
+  - <code>attn_scores @ V</code> 也是矩阵乘法<br>
+  整个 Attention 核心就这三步。PyTorch 里两行代码搞定。
+</div>
+
+<!-- ====== 概念三：nn.Linear = Wx+b ====== -->
+<h2>概念三：nn.Linear —— 这就是第 5 课的 Wx+b</h2>
+
+<p>
+  在 L5 的 Transformer Block 里，有一个关键操作：<strong>前馈网络（FFN）</strong>。它的数学形式是：
+</p>
+
+<blockquote>
+  输出 = W₂ × GELU(W₁ × 输入 + b₁) + b₂
+</blockquote>
+
+<p>
+  其中 <strong>Wx + b</strong> 这个操作，在 PyTorch 里就叫 <code>nn.Linear(in_features, out_features)</code>。
+  它做的事情就是：
+</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">layer = nn.Linear(768, 3072)</span><span class="note">定义：输入 768 维 → 输出 3072 维</span></div>
+  <div class="line"><span class="code"># 内部自动创建两个张量：</span><span class="note">你不需要手动创建，PyTorch 帮你搞定</span></div>
+  <div class="line"><span class="code">#   layer.weight  shape=(3072, 768)</span><span class="note">这就是 W 矩阵（3072 行 × 768 列）</span></div>
+  <div class="line"><span class="code">#   layer.bias    shape=(3072,)</span><span class="note">这就是 b 向量（3072 个数）</span></div>
+  <div class="line"><span class="code">output = layer(input)</span><span class="note">等价于 input @ W.T + b，一步到位</span></div>
+</div>
+
+<div class="callout">
+  <strong>🔗 回到 L5</strong>
+  一个 Transformer FFN 就是两个 Linear 夹一个激活函数：<br>
+  <code>nn.Linear(768, 3072)</code> → GELU → <code>nn.Linear(3072, 768)</code><br>
+  先扩到 4 倍，再缩回来。这个「扩张-压缩」的结构给了模型思考的空间。
+</div>
+
+<!-- ====== 概念四：nn.Embedding = 查表 ====== -->
+<h2>概念四：nn.Embedding —— 这就是第 3 课的查表</h2>
+
+<p>
+  回到 L3，你理解了 Embedding 的本质：<strong>每个 token ID 对应一个向量，Embedding 层就是一张巨大的查找表</strong>。
+  在 PyTorch 里，它就是 <code>nn.Embedding(num_embeddings, embedding_dim)</code>：
+</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">embed = nn.Embedding(50257, 768)</span><span class="note">定义：50257 个词 × 每个 768 维向量</span></div>
+  <div class="line"><span class="code"># embed.weight  shape=(50257, 768)</span><span class="note">这就是那张「大表」—— 50257 行，每行 768 个数</span></div>
+  <div class="line"><span class="code">token_ids = torch.tensor([42, 318, 7])</span><span class="note">假设这三个 token ID 代表 "我 喜欢 猫"</span></div>
+  <div class="line"><span class="code">vecs = embed(token_ids)</span><span class="note">查表：取出第 42、318、7 行的向量</span></div>
+  <div class="line"><span class="code"># vecs.shape  →  (3, 768)</span><span class="note">3 个 token，每个变成 768 维向量</span></div>
+</div>
+
+<table>
+  <tr><th>L3 的概念</th><th>PyTorch 代码</th><th>Shape</th></tr>
+  <tr><td>Embedding 查表</td><td><code>nn.Embedding(vocab, dim)</code></td><td><code>(vocab, dim)</code></td></tr>
+  <tr><td>Token ID → 向量</td><td><code>embed(token_ids)</code></td><td><code>(seq_len, dim)</code></td></tr>
+  <tr><td>位置编码（可学习）</td><td><code>nn.Embedding(max_len, dim)</code></td><td><code>(max_len, dim)</code></td></tr>
+</table>
+
+<!-- ====== 概念五：autograd ====== -->
+<h2>概念五：autograd —— 自动求导，不用手算梯度了</h2>
+
+<p>
+  在 L6 你理解了梯度下降：算 loss → 求每个参数的梯度 → 沿梯度反方向更新参数。
+  但当时说的是「手算导数」。现实中模型有上亿参数，手算是不可能的。
+</p>
+
+<p>
+  <strong>autograd 就是 PyTorch 的自动求导引擎。</strong> 它的工作原理很简单：
+</p>
+
+<ol>
+  <li><strong>Forward（前向）</strong>：正常做计算，PyTorch 在后台悄悄记录每一步操作，构建一张「计算图」</li>
+  <li><strong>Backward（反向）</strong>：调用 <code>loss.backward()</code>，PyTorch 从 loss 出发，沿着计算图往回走，自动算出每个参数的梯度</li>
+  <li><strong>梯度存在 <code>param.grad</code> 里</strong>，直接用就行</li>
+</ol>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">x = torch.tensor([2.0], requires_grad=True)</span><span class="note">告诉 PyTorch：「这个变量我需要求梯度」</span></div>
+  <div class="line"><span class="code">y = x ** 2 + 3 * x + 1</span><span class="note">y = x² + 3x + 1，PyTorch 自动记录计算过程</span></div>
+  <div class="line"><span class="code">y.backward()</span><span class="note">自动计算 dy/dx，结果存在 x.grad 里</span></div>
+  <div class="line"><span class="code">x.grad  →  tensor([7.])</span><span class="note">dy/dx = 2x + 3 = 2×2 + 3 = 7 ✅ 不需要你手算</span></div>
+</div>
+
+<!-- 交互：微型 autograd 模拟器 -->
+<div class="autograd-demo">
+  <h4>🔬 动手试试：微型 autograd 模拟器</h4>
+  <p style="font-size:0.88rem; color:var(--muted);">
+    这是一个极简计算图：<code>y = w × x + b</code>（就像 nn.Linear 的一个神经元的计算！）
+  </p>
+  <div class="shape-controls">
+    <label>w:</label><input type="number" id="w-val" value="2.0" step="0.5" style="width:5rem;">
+    <label>x:</label><input type="number" id="x-val" value="3.0" step="0.5" style="width:5rem;">
+    <label>b:</label><input type="number" id="b-val" value="1.0" step="0.5" style="width:5rem;">
+    <button onclick="runAutogradDemo()">▶ 运行 Backward</button>
+  </div>
+  <div class="comp-graph" id="comp-graph"></div>
+  <div id="autograd-result" style="font-size:0.85rem; color: var(--muted); margin-top: 0.75rem;"></div>
+</div>
+
+<div class="callout">
+  <strong>🔗 回到 L6 训练循环</strong>
+  有了 autograd，整个训练循环简化成了五步：<br>
+  <code>output = model(input)</code> → <code>loss = criterion(output, target)</code> → <code>loss.backward()</code> → <code>optimizer.step()</code> → <code>optimizer.zero_grad()</code><br>
+  其中 <code>backward()</code> 是 autograd 的入口，之前 L6 讲的「反向传播求梯度」就是它自动完成的。
+</div>
+
+<!-- ====== 完整代码示例 ====== -->
+<h2>把所有零件拼起来：一个微型前向传播</h2>
+
+<p>下面这段代码用了你刚学的所有 PyTorch 操作。读一遍，看注释——它和 Phase 1 的架构一一对应：</p>
+
+<pre><code>import torch
+import torch.nn as nn
+
+# --- 1. Embedding：对应 L3 ---
+vocab_size = 1000         # 假设词表有 1000 个词
+d_model = 64              # 每个词的向量维度
+embed = nn.Embedding(vocab_size, d_model)
+
+# --- 2. Linear：对应 L5 的 FFN ---
+ffn = nn.Linear(d_model, 4 * d_model)  # 768 → 3072 的缩小版：64 → 256
+
+# --- 3. 模拟输入 ---
+input_ids = torch.tensor([[1, 5, 8, 2]])  # 一个句子，4 个 token
+print(f"输入 shape: {input_ids.shape}")    # (1, 4)  → 1 个句子，4 个 token
+
+# --- 4. 查 Embedding 表 ---
+x = embed(input_ids)
+print(f"Embedding 后 shape: {x.shape}")    # (1, 4, 64)  → 1 句 × 4 词 × 64 维
+
+# --- 5. 过 FFN ---
+out = ffn(x)
+print(f"FFN 后 shape: {out.shape}")        # (1, 4, 256) → 每个词从 64 维扩到了 256 维
+
+# --- 6. 每个参数的形状 ---
+for name, param in embed.named_parameters():
+    print(f"embed.{name} shape: {param.shape}")    # (1000, 64) — 大查找表
+
+for name, param in ffn.named_parameters():
+    print(f"ffn.{name} shape: {param.shape}")      # weight (256, 64), bias (256,)
+</code></pre>
+
+<p style="color: var(--muted); font-size: 0.9rem;">
+  ⚠️ 上述代码需要 Python + PyTorch 环境。如果你想亲自跑，建议使用 Google Colab（免费 GPU）：
+</p>
+<a class="colab-btn" href="https://colab.research.google.com/" target="_blank" rel="noopener">🔗 打开 Google Colab（国内可用 AutoDL 替代）</a>
+
+<!-- ====== 总结 ====== -->
+<hr>
+<h2>✅ 这节课你学会了</h2>
+
+<table>
+  <tr><th>概念</th><th>PyTorch 代码</th><th>对应的 Phase 1 知识</th></tr>
+  <tr><td>张量</td><td><code>torch.randn(2,3,4)</code></td><td>数据的基本载体</td></tr>
+  <tr><td>矩阵乘法</td><td><code>torch.matmul(A, B)</code></td><td>L4 注意力：Q@K<sup>T</sup></td></tr>
+  <tr><td>全连接层</td><td><code>nn.Linear(768, 3072)</code></td><td>L5 FFN：Wx+b</td></tr>
+  <tr><td>词嵌入</td><td><code>nn.Embedding(50257, 768)</code></td><td>L3 Embedding 查表</td></tr>
+  <tr><td>自动求导</td><td><code>loss.backward()</code></td><td>L6 梯度下降的反向传播</td></tr>
+</table>
+
+<p>
+  从下一课开始，我们将逐个把 Phase 1 的概念翻译成真正的 PyTorch 代码——
+  先是 Embedding + 位置编码（L9），然后是注意力（L10）。
+  你已经有了「看懂原理」的眼睛，现在要长出「写出代码」的手。
+</p>
+
+<!-- ====== 导航 ====== -->
+<nav class="lesson-nav">
+  <a href="../index.html">← 回到树屋总览</a>
+  <span style="color:var(--faint);">下一课：实现 Embedding + 位置编码（即将更新）→</span>
+</nav>
+
+<footer class="lesson-footer">
+  <p>
+    第 8 课 · PyTorch 基础 —— Phase 2 代码实现的第一课。
+    建议配合 Google Colab 或本地 Jupyter Notebook 实际运行代码。
+  </p>
+</footer>
+
+<!-- ====== 交互脚本 ====== -->
+<script>
+// ========== 张量形状探索器 ==========
+function renderTensor() {
+  const d1 = parseInt(document.getElementById('dim1').value) || 3;
+  const d2 = parseInt(document.getElementById('dim2').value) || 4;
+  const d3 = parseInt(document.getElementById('dim3').value) || 1;
+
+  let shape, html;
+  if (d3 <= 1) {
+    // 2D: (d1, d2)
+    shape = [d1, d2];
+    html = '<div class="tensor-grid" style="grid-template-columns: repeat(' + d2 + ', 1fr);">';
+    for (let i = 0; i < d1; i++) {
+      for (let j = 0; j < d2; j++) {
+        const val = (Math.random() * 2 - 1).toFixed(1);
+        html += '<div class="tensor-cell">' + val + '</div>';
+      }
+    }
+    html += '</div>';
+  } else {
+    // 3D: show each slice
+    shape = [d3, d1, d2];
+    html = '';
+    for (let k = 0; k < d3; k++) {
+      html += '<p style="margin:0.5rem 0 0.25rem;font-size:0.8rem;color:var(--muted);">切片 [' + k + ']：</p>';
+      html += '<div class="tensor-grid" style="grid-template-columns: repeat(' + d2 + ', 1fr);">';
+      for (let i = 0; i < d1; i++) {
+        for (let j = 0; j < d2; j++) {
+          const val = (Math.random() * 2 - 1).toFixed(1);
+          html += '<div class="tensor-cell">' + val + '</div>';
+        }
+      }
+      html += '</div>';
+    }
+  }
+
+  document.getElementById('tensor-display').innerHTML = html;
+  document.getElementById('tensor-shape-info').textContent =
+    'shape: (' + shape.join(', ') + ')  ·  元素总数: ' + shape.reduce((a,b) => a*b, 1);
+}
+
+// ========== 矩阵乘法可视化 ==========
+function renderMatmul() {
+  // A: 2x3, B: 3x2
+  const A = [[1, 2, 3], [4, 5, 6]];
+  const B = [[7, 8], [9, 10], [11, 12]];
+
+  function matrixToHtml(M, idPrefix) {
+    let h = '<table>';
+    for (let i = 0; i < M.length; i++) {
+      h += '<tr>';
+      for (let j = 0; j < M[0].length; j++) {
+        h += '<td id="' + idPrefix + '-' + i + '-' + j + '" style="cursor:default;">' + M[i][j] + '</td>';
+      }
+      h += '</tr>';
+    }
+    h += '</table>';
+    return h;
+  }
+
+  // Compute C = A × B
+  const C = [[0,0],[0,0]];
+  for (let i = 0; i < 2; i++)
+    for (let j = 0; j < 2; j++)
+      for (let k = 0; k < 3; k++)
+        C[i][j] += A[i][k] * B[k][j];
+
+  function resultToHtml() {
+    let h = '<table>';
+    for (let i = 0; i < C.length; i++) {
+      h += '<tr>';
+      for (let j = 0; j < C[0].length; j++) {
+        h += '<td id="res-' + i + '-' + j + '" title="点击看计算过程" style="cursor:pointer;" onclick="showMatmulStep(' + i + ',' + j + ')">' + C[i][j] + '</td>';
+      }
+      h += '</tr>';
+    }
+    h += '</table>';
+    return h;
+  }
+
+  const html =
+    '<div class="matmul-viz">' +
+    matrixToHtml(A, 'a') +
+    '<span class="op-symbol">×</span>' +
+    matrixToHtml(B, 'b') +
+    '<span class="op-symbol">=</span>' +
+    resultToHtml() +
+    '</div>';
+
+  document.getElementById('matmul-display').innerHTML = html;
+  document.getElementById('matmul-formula').textContent =
+    'A (2×3) × B (3×2) = C (2×2)  |  点击结果格子看计算过程';
+}
+
+function showMatmulStep(i, j) {
+  const A = [[1, 2, 3], [4, 5, 6]];
+  const B = [[7, 8], [9, 10], [11, 12]];
+  let steps = [];
+  let total = 0;
+  for (let k = 0; k < 3; k++) {
+    steps.push(A[i][k] + '×' + B[k][j]);
+    total += A[i][k] * B[k][j];
+  }
+  document.getElementById('matmul-formula').textContent =
+    'C[' + i + '][' + j + '] = ' + steps.join(' + ') + ' = ' + total +
+    '（A 的第 ' + (i+1) + ' 行 点乘 B 的第 ' + (j+1) + ' 列）';
+
+  // Highlight
+  const allCells = document.querySelectorAll('#matmul-display td');
+  allCells.forEach(c => c.style.background = '');
+  for (let k = 0; k < 3; k++) {
+    document.getElementById('a-' + i + '-' + k).style.background = '#fff3cd';
+    document.getElementById('b-' + k + '-' + j).style.background = '#fff3cd';
+  }
+  document.getElementById('res-' + i + '-' + j).style.background = '#d4edda';
+}
+
+// ========== autograd 模拟器 ==========
+function runAutogradDemo() {
+  const w = parseFloat(document.getElementById('w-val').value);
+  const x = parseFloat(document.getElementById('x-val').value);
+  const b = parseFloat(document.getElementById('b-val').value);
+
+  // Forward: y = w * x + b
+  const mul = w * x;      // 中间值: w*x
+  const y = mul + b;       // 最终输出
+
+  // Backward: dy/dw, dy/dx, dy/db
+  // y = w*x + b
+  // dy/dw = x
+  // dy/dx = w
+  // dy/db = 1
+  // 局部梯度 × 上游梯度(dy/dy=1)
+  const d_w = x * 1;
+  const d_x = w * 1;
+  const d_b = 1;
+  const d_mul = 1;  // dy/d(mul)
+
+  const html =
+    '<div class="comp-node">w=' + w.toFixed(1) + '<div class="node-grad">∇=' + d_w.toFixed(1) + '</div></div>' +
+    '<span class="comp-arrow">↘</span>' +
+    '<div class="comp-node">w×x=' + mul.toFixed(1) + '<div class="node-grad">∇=' + d_mul.toFixed(1) + '</div></div>' +
+    '<span class="comp-arrow">→</span>' +
+    '<div class="comp-node">y=' + y.toFixed(1) + '<div class="node-grad">∇=1</div></div>' +
+    '<br>' +
+    '<div class="comp-node">x=' + x.toFixed(1) + '<div class="node-grad">∇=' + d_x.toFixed(1) + '</div></div>' +
+    '<span class="comp-arrow">↗</span>' +
+    '<span style="margin:0 2.5rem;"></span>' +
+    '<div class="comp-node">b=' + b.toFixed(1) + '<div class="node-grad">∇=' + d_b.toFixed(1) + '</div></div>';
+
+  document.getElementById('comp-graph').innerHTML = html;
+  document.getElementById('autograd-result').innerHTML =
+    '<strong>手动验证：</strong> dy/dw = x = ' + x.toFixed(1) +
+    ' &nbsp;|&nbsp; dy/dx = w = ' + w.toFixed(1) +
+    ' &nbsp;|&nbsp; dy/db = 1<br>' +
+    '如果这是 <code>nn.Linear</code> 的一个神经元，<code>backward()</code> 后 <code>w.grad</code> 就是 ' + d_w.toFixed(1) +
+    '，<code>b.grad</code> 就是 ' + d_b.toFixed(1);
+}
+
+// ========== 初始化 ==========
+renderTensor();
+renderMatmul();
+runAutogradDemo();
+</script>
+</body>
+</html>
