@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第11课 · 实现 Transformer Block</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .block-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin: 1.25rem 0;
+    font-family: "JetBrains Mono","Cascadia Code",Consolas,monospace;
+    font-size: 0.78rem;
+  }
+  .block-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    background: var(--code-bg);
+    border: 1px solid var(--rule);
+  }
+  .block-row .tag {
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    min-width: 2.8rem;
+    text-align: center;
+  }
+  .tag-ln { background: #e3f2fd; color: #1565c0; }
+  .tag-attn { background: #fff3e0; color: #e65100; }
+  .tag-ffn { background: #e8f5e9; color: #2e7d32; }
+  .tag-resid { background: #fce4ec; color: #c62828; }
+  .block-row .arrow-block { color: var(--muted); font-size: 1rem; flex-shrink: 0; }
+  @media (prefers-color-scheme: dark) {
+    .tag-ln { background: #0d2137; color: #90caf9; }
+    .tag-attn { background: #3e2723; color: #ffcc80; }
+    .tag-ffn { background: #1b3a1b; color: #a5d6a7; }
+    .tag-resid { background: #3e1a1a; color: #ef9a9a; }
+  }
+
+  .code-annotated { margin: 1rem 0; }
+  .code-annotated .line { display: flex; gap: 0.75rem; font-family: "JetBrains Mono","Cascadia Code",Consolas,monospace; font-size: 0.8rem; line-height: 1.7; }
+  .code-annotated .line .code { flex: 0 0 auto; min-width: 380px; color: var(--text); }
+  .code-annotated .line .note { color: var(--muted); font-family: "Source Serif 4","Noto Serif CJK SC",serif; font-size: 0.78rem; }
+
+  .experiment { margin: 1.5rem 0; border: 2px solid var(--rule); border-radius: 10px; padding: 1.25rem; background: var(--code-bg); }
+
+  @media (max-width: 640px) {
+    .code-annotated .line { flex-direction: column; gap: 0.1rem; }
+    .code-annotated .line .code { min-width: auto; }
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🧱 第11课 · 实现 Transformer Block</h1>
+
+<h2>Block：12 层积木，每层一模一样</h2>
+
+<p>
+  L10 实现了注意力，现在要把它和 FFN、残差连接、LayerNorm 打包成一个标准的<strong>Transformer Block</strong>。
+  GPT-2 有 12 个完全一样的 Block 叠在一起——数据从第 1 层流到第 12 层，每一层都在上一层的输出上做进一步的理解。
+</p>
+
+<div class="block-diagram">
+  <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:0.3rem;">📐 一个 Transformer Block 的结构（Pre-LN 顺序）：</div>
+  <div class="block-row">
+    <span style="color:var(--muted);">输入 x →</span>
+    <span class="tag tag-ln">LN</span>
+    <span class="arrow-block">→</span>
+    <span class="tag tag-attn">Attention</span>
+    <span class="arrow-block">→</span>
+    <span class="tag tag-resid">+x</span>
+    <span class="arrow-block">→</span>
+    <span class="tag tag-ln">LN</span>
+    <span class="arrow-block">→</span>
+    <span class="tag tag-ffn">FFN</span>
+    <span class="arrow-block">→</span>
+    <span class="tag tag-resid">+x</span>
+    <span style="color:var(--muted);">→ 输出</span>
+  </div>
+</div>
+
+<p>拆开来看就四个零件，每个你都见过：</p>
+
+<table>
+  <tr><th>零件</th><th>代码</th><th>作用</th><th>哪学的？</th></tr>
+  <tr><td>LayerNorm</td><td><code>nn.LayerNorm(768)</code></td><td>把数据压到均值为 0、方差为 1</td><td>L5</td></tr>
+  <tr><td>Multi-Head Attention</td><td><code>MultiHeadAttention()</code></td><td>让 token 之间互相「看」</td><td>L10</td></tr>
+  <tr><td>FFN</td><td><code>Linear→GELU→Linear</code></td><td>对每个 token 独立做非线性变换</td><td>L5、L8</td></tr>
+  <tr><td>残差连接</td><td><code>x = x + sublayer(x)</code></td><td>让梯度直接穿透到深层</td><td>L5</td></tr>
+</table>
+
+<!-- ====== 概念一：LayerNorm ====== -->
+<h2>概念一：LayerNorm —— 给数据「梳理」一下</h2>
+
+<p>
+  L5 讲了 LayerNorm 的原理：<strong>把每个 token 的向量标准化</strong>，均值变为 0，方差变为 1，然后乘以可学习的 γ 加上 β。
+  在 PyTorch 里，它就是一行：
+</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">self.ln1 = nn.LayerNorm(d_model)</span><span class="note">定义：对 768 维向量做归一化</span></div>
+  <div class="line"><span class="code">x_norm = self.ln1(x)</span><span class="note">使用：(B, L, 768) → (B, L, 768)，shape 不变</span></div>
+</div>
+
+<p>
+  为什么 Attention 和 FFN 之前都要先过 LayerNorm？因为经过多层处理后，
+  数值的分布会逐渐漂移（有的维度变得很大，有的变得很小）——
+  这会破坏训练稳定性。LayerNorm 在每一个 Block 的入口和中间各做一次「梳理」，确保数值始终保持健康分布。
+</p>
+
+<div class="callout">
+  <strong>💡 LayerNorm vs BatchNorm</strong><br>
+  BatchNorm 对同一个 batch 里的不同样本做归一化（跨 batch 维度）——这在 NLP 里不稳定，因为句子长度不一。<br>
+  LayerNorm 对每个样本自己做归一化（跨特征维度）——与 batch 大小无关，训练和推理行为一致。<br>
+  这就是为什么 Transformer 选 LayerNorm 而不是 BatchNorm。
+</div>
+
+<!-- ====== 概念二：FFN ====== -->
+<h2>概念二：FFN —— 每个 token 的「独立思想」</h2>
+
+<p>
+  注意力的作用是「token 之间交换信息」。但交换完之后，每个 token 需要<strong>独立地「消化」</strong>这些信息——
+  这就是 FFN（前馈网络）的角色。
+</p>
+
+<p>FFN 的结构极其简单——两个 Linear 夹一个 GELU 激活函数：</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">self.ffn = nn.Sequential(</span><span class="note">Sequential：把多层打包成一个模块</span></div>
+  <div class="line"><span class="code">    nn.Linear(768, 3072),</span><span class="note">第一步：从 768 维扩张到 3072 维（4 倍）</span></div>
+  <div class="line"><span class="code">    nn.GELU(),</span><span class="note">第二步：非线性激活函数（比 ReLU 更平滑）</span></div>
+  <div class="line"><span class="code">    nn.Linear(3072, 768),</span><span class="note">第三步：从 3072 维压缩回 768 维</span></div>
+  <div class="line"><span class="code">)</span><span class="note">输入输出 shape 相同：(B, L, 768) → (B, L, 768)</span></div>
+</div>
+
+<div class="callout">
+  <strong>🔗 回到 L5</strong>
+  「扩张到 4 倍再压缩」这个设计，L5 讲过——它给了模型一个高维空间来暂存中间计算结果，
+  类似于草稿纸上写演算过程，最终只保留结论。
+  GELU（Gaussian Error Linear Unit）相比 ReLU 更平滑，梯度流动更顺畅。
+</div>
+
+<!-- ====== 概念三：残差连接 ====== -->
+<h2>概念三：残差连接 —— 让梯度「走高速」</h2>
+
+<p>
+  GPT-2 有 12 层 Block。如果没有残差连接，梯度从最后一层传回第一层时，会被连乘 12 次——
+  数值会变得非常小（梯度消失），前面的层几乎学不到东西。
+</p>
+
+<p>
+  <strong>残差连接就是在每个子层（Attention/FFN）外面加一条「旁路」</strong>：
+</p>
+
+<pre><code># 不是：x = attention(x)    ← 替换 x
+# 而是：x = x + attention(x) ← 在原有 x 基础上加上 attention 的贡献</code></pre>
+
+<p>
+  后果很神奇：反向传播时，<strong>梯度可以通过旁路直达浅层</strong>，不被 12 层变换削弱。
+  这是让深层网络可训练的核心技巧。
+</p>
+
+<div class="callout">
+  <strong>💡 直觉理解</strong><br>
+  把残差连接想象成一条「高速公路」：正常情况下车要从 A 到 B 需要绕山路（经过 Attention/FFN 的计算），
+  但残差连接在 A 和 B 之间直接修了一条隧道——信息可以直通。训练时，梯度也可以通过这条隧道直达浅层，避免衰减。
+</div>
+
+<!-- ====== 概念四：Pre-LN 顺序 ====== -->
+<h2>概念四：Pre-LN —— LN 先做，再交给子层</h2>
+
+<p>
+  有两种顺序：
+</p>
+
+<table>
+  <tr><th>顺序</th><th>结构</th><th>特点</th></tr>
+  <tr><td>Post-LN（原始 Transformer）</td><td>Attention → +x → <strong>LN</strong></td><td>不稳定，容易梯度爆炸</td></tr>
+  <tr><td><strong>Pre-LN（GPT-2 用的）</strong></td><td><strong>LN</strong> → Attention → +x</td><td>稳定，梯度更平滑</td></tr>
+</table>
+
+<p>
+  GPT-2 选择了 Pre-LN：输入先进 LayerNorm 做标准化，再交给 Attention/FFN 处理，最后加上残差。
+  这里的「Pre」指的是 LN 在子层<strong>之前</strong>。
+</p>
+
+<!-- ====== 完整代码 ====== -->
+<h2>完整代码：TransformerBlock 类</h2>
+
+<pre><code>import torch
+import torch.nn as nn
+
+class TransformerBlock(nn.Module):
+    """GPT-2 的一个 Transformer Block（12 个这样的 Block 叠起来）"""
+
+    def __init__(self, d_model=768, num_heads=12, dropout=0.1):
+        super().__init__()
+
+        # --- 子层 1：自注意力 ---
+        self.ln1 = nn.LayerNorm(d_model)          # Pre-LN：先归一化
+        self.attn = MultiHeadAttention(           # 来自 L10
+            d_model=d_model,
+            num_heads=num_heads,
+            dropout=dropout
+        )
+
+        # --- 子层 2：前馈网络 ---
+        self.ln2 = nn.LayerNorm(d_model)          # Pre-LN：先归一化
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, 4 * d_model),      # 768 → 3072（4倍扩张）
+            nn.GELU(),                            # 非线性激活
+            nn.Linear(4 * d_model, d_model),      # 3072 → 768（压缩回来）
+        )
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        # --- 子层 1：Attention（Pre-LN） ---
+        # 注意这里只有两行，但就是完整的注意力子层！
+        normed = self.ln1(x)                # 先 LN
+        x = x + self.dropout(self.attn(normed))  # 再 Attention + 残差
+
+        # --- 子层 2：FFN（Pre-LN） ---
+        # 完全相同的模式：LN → 子层 → +残差
+        normed = self.ln2(x)                # 先 LN
+        x = x + self.dropout(self.ffn(normed))   # 再 FFN + 残差
+
+        return x
+
+
+# ===== 测试：12 个 Block 叠起来 =====
+from L10_attention import MultiHeadAttention  # 假设 L10 的代码在此
+
+class MiniGPT(nn.Module):
+    def __init__(self, num_layers=12):
+        super().__init__()
+        self.blocks = nn.Sequential(*[
+            TransformerBlock() for _ in range(num_layers)
+        ])
+
+    def forward(self, x):
+        return self.blocks(x)
+
+model = MiniGPT(num_layers=12)
+x = torch.randn(2, 512, 768)     # 模拟输入
+out = model(x)
+print(f"输入: {x.shape}")         # (2, 512, 768)
+print(f"输出: {out.shape}")       # (2, 512, 768) — 12 层后 shape 不变！</code></pre>
+
+<div class="callout">
+  <strong>📊 关键洞察</strong>
+  12 层 Block 叠在一起，输入和输出的 shape 完全一样：(B, L, 768)。
+  这就是「残差连接 + Pre-LN」的威力——每一层都是<strong>增量修改</strong>，而不是完全替换。
+  这意味着：① 梯度可以无损穿过每一层 ② 可以在训练好的模型中间插入/删除层 ③ 某层「罢工」了输出也不会崩溃。
+</div>
+
+<!-- 交互：Block 数据流 -->
+<div class="experiment">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：Block 内部数据流追踪</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    选一个 token（比如「猫」），追踪它经过一个 Block 时的数值变化。观察 LayerNorm 如何「梳理」分布，Attention 如何「混合」信息，残差如何「保留」原始信号。
+  </p>
+  <div style="margin-bottom:0.8rem;">
+    <button onclick="stepBlockFlow()" style="padding:0.4rem 0.9rem;font-size:0.85rem;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;">▶ 下一步</button>
+    <button onclick="resetBlockFlow()" style="padding:0.4rem 0.9rem;font-size:0.85rem;font-weight:600;border:1px solid var(--accent);border-radius:4px;background:var(--bg);color:var(--accent);cursor:pointer;margin-left:0.4rem;">↺ 重置</button>
+    <span id="bf-step-label" style="margin-left:0.75rem;font-size:0.8rem;color:var(--muted);font-weight:600;"></span>
+  </div>
+  <div id="blockflow-display" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.78rem;line-height:1.8;"></div>
+</div>
+
+<!-- ====== 总结 ====== -->
+<hr>
+<h2>✅ 这节课你学会了</h2>
+
+<table>
+  <tr><th>零件</th><th>代码</th><th>Shape</th></tr>
+  <tr><td>LayerNorm</td><td><code>nn.LayerNorm(768)</code></td><td>不变</td></tr>
+  <tr><td>FFN</td><td><code>Linear(768,3072)→GELU→Linear(3072,768)</code></td><td>768→3072→768</td></tr>
+  <tr><td>残差连接</td><td><code>x = x + sublayer(norm(x))</code></td><td>不变（增量更新）</td></tr>
+  <tr><td>Pre-LN 顺序</td><td><code>LN → Sublayer → +x</code></td><td>GPT-2 的标准做法</td></tr>
+  <tr><td>Block 输入→输出</td><td><code>(B,L,768) → (B,L,768)</code></td><td>完全一致</td></tr>
+</table>
+
+<p>
+  现在你已经拥有了 Transformer 的<strong>三个核心模块</strong>：输入层（L9）、注意力（L10）、Block（L11）。
+  接下来只剩最后一步——把它们组装成一个完整的 GPT 模型。
+</p>
+
+<!-- ====== 导航 ====== -->
+<nav class="lesson-nav">
+  <a href="0010-attention-implementation.html">← 上一课：实现注意力机制</a>
+  <a href="0012-gpt2-full.html">下一课：组装完整 GPT-2 模型 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>
+    第 11 课 · 实现 Transformer Block —— 四个零件拼成一层，12 层叠成模型的核心。
+    残差连接是让这一切能训练起来的关键。有问题随时回来问 Bib。
+  </p>
+</footer>
+
+<script>
+// ========== Block 数据流追踪 ==========
+const BF_TOKENS = ['我', '喜欢', '猫'];
+const BF_INITIAL = [
+  [ 0.21, -0.45,  0.83, -0.12],
+  [-0.67,  0.34, -0.21,  0.75],
+  [ 0.92, -0.18,  0.44, -0.56]
+];
+const BF_STEPS = [
+  { label: '① 输入 x（来自 L9）', vecs: BF_INITIAL },
+  { label: '② 经过 LN1：均值→0，方差→1', vecs: [
+    [ 0.31, -0.67,  0.95, -0.28],
+    [-0.71,  0.41, -0.33,  0.82],
+    [ 0.88, -0.22,  0.51, -0.63]
+  ]},
+  { label: '③ Attention 后：混合了其他 token 的信息', vecs: [
+    [ 0.18, -0.52,  0.71, -0.15],
+    [-0.55,  0.28, -0.19,  0.68],
+    [ 0.85, -0.14,  0.39, -0.51]
+  ]},
+  { label: '④ 残差连接：x = x + attn_out', vecs: [
+    [ 0.39, -0.97,  1.54, -0.27],
+    [-1.22,  0.62, -0.40,  1.43],
+    [ 1.77, -0.32,  0.83, -1.07]
+  ]},
+  { label: '⑤ 经过 LN2：再次归一化', vecs: [
+    [ 0.43, -0.89,  1.12, -0.33],
+    [-0.90,  0.52, -0.38,  1.02],
+    [ 1.10, -0.29,  0.65, -0.78]
+  ]},
+  { label: '⑥ FFN 后：非线性变换', vecs: [
+    [ 0.25, -0.61,  0.88, -0.19],
+    [-0.72,  0.40, -0.25,  0.81],
+    [ 1.02, -0.17,  0.48, -0.62]
+  ]},
+  { label: '⑦ 残差连接：x = x + ffn_out → Block 输出', vecs: [
+    [ 0.64, -1.06,  1.83, -0.31],
+    [-1.39,  0.74, -0.46,  1.56],
+    [ 1.94, -0.35,  0.92, -1.18]
+  ]},
+];
+
+let bfStep = 0;
+
+function showBlockFlow() {
+  const step = BF_STEPS[bfStep];
+  document.getElementById('bf-step-label').textContent = step.label;
+
+  let html = '<div style="margin-bottom:0.4rem;font-size:0.75rem;color:var(--muted);">观察 token「猫」（位置2）的向量变化：</div>';
+  for (let t = 0; t < 3; t++) {
+    const v = step.vecs[t];
+    const vals = v.map(x => {
+      const color = x >= 0 ? '#2e7d32' : '#c62828';
+      return '<span style="color:' + color + ';">' + x.toFixed(2).padStart(5) + '</span>';
+    }).join('  ');
+    const highlight = t === 2 ? ' style="font-weight:700;"' : '';
+    html += '<div' + highlight + '>' + BF_TOKENS[t] + ' [' + vals + ' ]</div>';
+  }
+
+  document.getElementById('blockflow-display').innerHTML = html;
+}
+
+window.stepBlockFlow = function() {
+  if (bfStep < BF_STEPS.length - 1) bfStep++;
+  showBlockFlow();
+};
+
+window.resetBlockFlow = function() {
+  bfStep = 0;
+  showBlockFlow();
+};
+
+showBlockFlow();
+</script>
+</body>
+</html>

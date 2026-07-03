@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第10课 · 实现注意力机制</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .attn-heatmap-table { border-collapse: collapse; margin: 0.5rem 0; }
+  .attn-heatmap-table td { width: 2.5rem; height: 2rem; text-align: center; border: 1px solid var(--rule); font-family: "JetBrains Mono",Consolas,monospace; font-size: 0.78rem; padding: 0; }
+  .attn-heatmap-table .masked { background: #ddd; color: #999; }
+  @media (prefers-color-scheme: dark) {
+    .attn-heatmap-table .masked { background: #333; color: #666; }
+  }
+
+  .score-bar-wrap { display: flex; align-items: center; gap: 0.3rem; margin: 0.15rem 0; font-size: 0.78rem; }
+  .score-bar-wrap .bar-bg { flex:1; height:16px; background:var(--bg); border-radius:3px; overflow:hidden; border:1px solid var(--rule); }
+  .score-bar-wrap .bar-fill { height:100%; border-radius:2px; transition: width 0.3s; }
+  .score-bar-wrap .bar-label { width: 2.5rem; text-align: right; font-weight: 600; }
+
+  .code-annotated { margin: 1rem 0; }
+  .code-annotated .line { display: flex; gap: 0.75rem; font-family: "JetBrains Mono","Cascadia Code",Consolas,monospace; font-size: 0.8rem; line-height: 1.7; }
+  .code-annotated .line .code { flex: 0 0 auto; min-width: 380px; color: var(--text); }
+  .code-annotated .line .note { color: var(--muted); font-family: "Source Serif 4","Noto Serif CJK SC",serif; font-size: 0.78rem; }
+
+  .experiment { margin: 1.5rem 0; border: 2px solid var(--rule); border-radius: 10px; padding: 1.25rem; background: var(--code-bg); }
+
+  @media (max-width: 640px) {
+    .code-annotated .line { flex-direction: column; gap: 0.1rem; }
+    .code-annotated .line .code { min-width: auto; }
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🎯 第10课 · 实现注意力机制</h1>
+
+<h2>注意力：Transformer 的灵魂</h2>
+
+<p>
+  L4 已经讲透了注意力机制「是什么」——Q 查 K，算分数，加权 V。
+  这节课把它翻译成能跑的 PyTorch 代码。这是整个 GPT 模型里<strong>最复杂、也最核心</strong>的一个模块。
+</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">输入 x</div><div class="sub">(B, L, 768)</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">Q/K/V 投影</div><div class="sub">3个 nn.Linear</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">拆多头</div><div class="sub">12个头各64维</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">Q@K.T/√d</div><div class="sub">点积注意力</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">因果遮罩</div><div class="sub">上三角=-inf</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">Softmax</div><div class="sub">归一化</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">加权V</div><div class="sub">attn@V</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">拼回头+输出</div><div class="sub">concat+Linear</div></div>
+</div>
+
+<!-- ====== 概念一：Q/K/V 投影 ====== -->
+<h2>概念一：Q/K/V 投影 —— 一个输入，三个分身</h2>
+
+<p>
+  注意力机制的第一个操作：把输入向量 x（768 维）分别投影到<strong>查询（Q）、键（K）、值（V）</strong>三个空间。
+  投影就是矩阵乘法——也就是 <code>nn.Linear</code>，你已经在 L8 见过了。
+</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">self.W_query = nn.Linear(d_model, d_model, bias=False)</span><span class="note">Q 投影矩阵：768 → 768，bias=False 是 GPT-2 的设计选择</span></div>
+  <div class="line"><span class="code">self.W_key   = nn.Linear(d_model, d_model, bias=False)</span><span class="note">K 投影矩阵：每个 Linear 有自己独立的权重</span></div>
+  <div class="line"><span class="code">self.W_value = nn.Linear(d_model, d_model, bias=False)</span><span class="note">V 投影矩阵：三个矩阵形状相同，但数值不同（各自学习）</span></div>
+  <div class="line"><span class="code"></span><span class="note"></span></div>
+  <div class="line"><span class="code">Q = self.W_query(x)  # (B, L, d) → (B, L, d)</span><span class="note">每个 token 的向量 × W_Q → 得到该 token 的「查询」</span></div>
+  <div class="line"><span class="code">K = self.W_key(x)    # 同理，得到「键」</span><span class="note">Q 和 K 的投影矩阵不同（W_Q ≠ W_K），打破对称性</span></div>
+  <div class="line"><span class="code">V = self.W_value(x)  # 得到「值」</span><span class="note">V 是被加权求和的对象，携带最终输出的语义</span></div>
+</div>
+
+<div class="callout">
+  <strong>🔗 回到 L4</strong>
+  Q 是「我要找什么」，K 是「我有什么标签」，V 是「我有什么内容」。
+  三个 Linear 各自学习——训练后，W_Q 学会生成「会提问」的向量，W_K 学会生成「容易被找到」的向量。
+</div>
+
+<!-- ====== 概念二：点积注意力 ====== -->
+<h2>概念二：Q @ Kᵀ —— 计算「谁该关注谁」</h2>
+
+<p>
+  有了 Q 和 K，接下来计算<strong>注意力分数矩阵</strong>——每个 token 对每个 token 的「关注程度」。
+  核心操作只有一行：
+</p>
+
+<pre><code>attn_scores = Q @ K.transpose(-2, -1) / math.sqrt(d_k)</code></pre>
+
+<p>拆解这一行：</p>
+
+<table>
+  <tr><th>部分</th><th>含义</th><th>Shape</th></tr>
+  <tr><td><code>Q</code></td><td>查询矩阵</td><td>(B, num_heads, L, d_k)</td></tr>
+  <tr><td><code>K.transpose(-2, -1)</code></td><td>把 K 的最后两维转置</td><td>(B, num_heads, d_k, L)</td></tr>
+  <tr><td><code>Q @ K.T</code></td><td>矩阵乘法 → 每对 token 的点积分数</td><td>(B, num_heads, L, L)</td></tr>
+  <tr><td><code>/ sqrt(d_k)</code></td><td>除以 √d_k（缩放因子）</td><td>防止点积太大导致 Softmax 饱和</td></tr>
+</table>
+
+<p>
+  结果是一张 <strong>L×L 的方阵</strong>，其中第 i 行第 j 列的值 = 第 i 个 token 的 Q 与第 j 个 token 的 K 的<strong>点乘结果</strong>（缩放后）。
+  值越大 = 第 i 个 token 越应该关注第 j 个 token。
+</p>
+
+<div class="callout">
+  <strong>💡 为什么除以 √d_k？</strong><br>
+  点积的方差会随维度 d_k 增大而增大（因为累加了大量乘积）。
+  Q·K 里的值可能变得很大（比如 ±50），Softmax 会对大值输出接近 0 或 1 的极端分布——
+  这会导致梯度消失，训练不动。除以 √d_k 把方差压回 1，保持 Softmax 在「温和」区间。<br>
+  对于 GPT-2：d_k = 64，√d_k = 8。
+</div>
+
+<!-- ====== 概念三：因果遮罩 ====== -->
+<h2>概念三：因果遮罩 —— 不准偷看未来</h2>
+
+<p>
+  GPT 是自回归模型：预测第 5 个词时，<strong>只能看第 1~4 个词，不能看第 5 个及之后</strong>。
+  如果不加限制，模型看到答案再答题，训练等于作弊。
+</p>
+
+<p>实现方法：生成一个下三角矩阵（torch.tril），把上三角（未来位置）设为 -inf。</p>
+
+<pre><code># 生成 L×L 的下三角矩阵（下三角=1，上三角=0）
+mask = torch.tril(torch.ones(L, L))
+
+# 把上三角的注意力分数设为 -inf
+# Softmax(-inf) = 0 —— 意味着完全不能关注
+attn_scores = attn_scores.masked_fill(mask == 0, float('-inf'))</code></pre>
+
+<!-- 因果遮罩交互 -->
+<div class="experiment">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：因果遮罩可视化</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    调整序列长度看遮罩变化。<span style="background:#d4edda;">绿色=可见</span>（当前及之前），<span style="background:#ddd;">灰色=不可见</span>（未来）。
+    每个格子代表「位置 i 能否看到位置 j」。
+  </p>
+  <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+    <label style="font-size:0.78rem;font-weight:600;">序列长度:</label>
+    <input type="range" id="cm-len" min="3" max="10" value="6" oninput="renderCausalMask()">
+    <span id="cm-len-display" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.8rem;">6</span>
+  </div>
+  <div id="causal-mask-display"></div>
+  <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem;">
+    🧐 「猫」(位置3)可以看到「我」(0)「喜欢」(1)「猫」(2)和自己(3)——但不能看之后的任何词。
+    这就是「因果」：只看过去，不看未来。
+  </p>
+</div>
+
+<p>经过遮罩 + Softmax 后，每一行的分数都是概率分布（和为 1），且未来位置的权重 = 0：</p>
+
+<pre><code>attn_weights = torch.softmax(attn_scores, dim=-1)   # (B, heads, L, L)</code></pre>
+
+<!-- 注意力分数交互 -->
+<div class="experiment">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：注意力分数模拟</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    模拟一个 4-token 句子（"我 喜欢 吃 鱼"）中，位置 2（"吃"）的 Q 与所有位置的 K 匹配后的注意力权重。
+    感受 Softmax + 因果遮罩的效果。
+  </p>
+  <div id="attn-sim-display"></div>
+</div>
+
+<!-- ====== 概念四：多头注意力 ====== -->
+<h2>概念四：多头注意力 —— 12 个视角，同时看</h2>
+
+<p>
+  单头注意力只能学到一种「关注模式」——比如总是关注相邻的 token。
+  但语言需要多种关注模式：<strong>语法头</strong>关注主谓搭配，<strong>语义头</strong>关注同义词，
+  <strong>距离头</strong>关注远处的修饰关系……
+</p>
+
+<p>
+  <strong>多头 = 把 d_model 切成 num_heads 份，每份独立做注意力，最后拼回来。</strong>
+</p>
+
+<p>GPT-2 small 的参数：d_model = 768，num_heads = 12，d_k = 768 / 12 = 64。</p>
+
+<h3>拆头和拼回的操作</h3>
+
+<div class="code-annotated">
+  <div class="line"><span class="code"># 输入: x shape = (B, L, 768)</span><span class="note">以 GPT-2 small 为例</span></div>
+  <div class="line"><span class="code">B, L, D = x.shape</span><span class="note"></span></div>
+  <div class="line"><span class="code"></span><span class="note"></span></div>
+  <div class="line"><span class="code"># Step 1: Q 投影后 reshape → 拆成 12 个头</span><span class="note"></span></div>
+  <div class="line"><span class="code">Q = self.W_query(x)         # (B, L, 768)</span><span class="note">先投影</span></div>
+  <div class="line"><span class="code">Q = Q.view(B, L, 12, 64)    # 把 768 切成 12×64</span><span class="note">最后一维被切成了 12 段，每段 64</span></div>
+  <div class="line"><span class="code">Q = Q.transpose(1, 2)       # (B, 12, L, 64)</span><span class="note">把 head 维度提到前面，方便并行</span></div>
+  <div class="line"><span class="code"></span><span class="note"></span></div>
+  <div class="line"><span class="code"># Step 2: 每个头独立做注意力（K, V 同理）</span><span class="note"></span></div>
+  <div class="line"><span class="code">attn = Q @ K.T / sqrt(64)   # (B, 12, L, L)</span><span class="note">12 个头各自算 QKᵀ，互不干扰</span></div>
+  <div class="line"><span class="code">attn = masked_softmax(attn) </span><span class="note">每个头各自遮罩 + 归一化</span></div>
+  <div class="line"><span class="code">out  = attn @ V             # (B, 12, L, 64)</span><span class="note">每个头各自加权 V</span></div>
+  <div class="line"><span class="code"></span><span class="note"></span></div>
+  <div class="line"><span class="code"># Step 3: 把 12 个头拼回来</span><span class="note"></span></div>
+  <div class="line"><span class="code">out = out.transpose(1, 2)   # (B, L, 12, 64)</span><span class="note">把 head 维度放回中间</span></div>
+  <div class="line"><span class="code">out = out.reshape(B, L, 768)# (B, L, 768)</span><span class="note">12×64 拼回 768</span></div>
+  <div class="line"><span class="code">out = self.out_proj(out)    # 最后再过一个 Linear 融合多头信息</span><span class="note">W_O 投影：把多头拼起来的结果再加工一次</span></div>
+</div>
+
+<div class="callout">
+  <strong>🔗 回到 L5</strong>
+  L5 里说过「多头 = 12 个单头并行」。上面的 view + transpose 就是把原理变成代码的具体操作。
+  注意：每个头只处理 64 维（不是 768），这样 12 个头加起来和单头 768 的计算量基本相同。
+</div>
+
+<!-- ====== 完整代码 ====== -->
+<h2>完整代码：MultiHeadAttention 类</h2>
+
+<pre><code>import torch
+import torch.nn as nn
+import math
+
+class MultiHeadAttention(nn.Module):
+    """GPT-2 的多头自注意力模块"""
+
+    def __init__(self, d_model=768, num_heads=12, dropout=0.1):
+        super().__init__()
+        assert d_model % num_heads == 0, "d_model 必须被 num_heads 整除"
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads          # 每个头的维度：768/12 = 64
+
+        # --- Q/K/V 投影矩阵（合并成一个大的，再切分） ---
+        self.W_query = nn.Linear(d_model, d_model, bias=False)
+        self.W_key   = nn.Linear(d_model, d_model, bias=False)
+        self.W_value = nn.Linear(d_model, d_model, bias=False)
+
+        # --- 输出投影：把多头拼起来后再加工 ---
+        self.out_proj = nn.Linear(d_model, d_model, bias=False)
+
+        # --- Dropout：对注意力权重做正则 ---
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        B, L, D = x.shape   # batch, seq_len, d_model
+
+        # 1. 投影到 Q/K/V 空间
+        Q = self.W_query(x)  # (B, L, D)
+        K = self.W_key(x)
+        V = self.W_value(x)
+
+        # 2. 拆成多头：(B, L, D) → (B, num_heads, L, d_k)
+        Q = Q.view(B, L, self.num_heads, self.d_k).transpose(1, 2)
+        K = K.view(B, L, self.num_heads, self.d_k).transpose(1, 2)
+        V = V.view(B, L, self.num_heads, self.d_k).transpose(1, 2)
+
+        # 3. 点积注意力：Q @ K.T / sqrt(d_k)
+        attn_scores = Q @ K.transpose(-2, -1) / math.sqrt(self.d_k)
+        # shape: (B, num_heads, L, L)
+
+        # 4. 因果遮罩
+        mask = torch.tril(torch.ones(L, L)).to(x.device)
+        attn_scores = attn_scores.masked_fill(mask == 0, float('-inf'))
+
+        # 5. Softmax + Dropout
+        attn_weights = torch.softmax(attn_scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        # 6. 加权求和 V
+        out = attn_weights @ V   # (B, num_heads, L, d_k)
+
+        # 7. 拼回多头 → 输出投影
+        out = out.transpose(1, 2).reshape(B, L, D)   # (B, L, D)
+        out = self.out_proj(out)
+
+        return out
+
+
+# ===== 测试 =====
+mha = MultiHeadAttention(d_model=768, num_heads=12)
+x = torch.randn(2, 512, 768)      # 模拟：2 句话，每句 512 token，每个 768 维
+out = mha(x)
+print(f"输入 shape: {x.shape}")     # (2, 512, 768)
+print(f"输出 shape: {out.shape}")   # (2, 512, 768) — 和输入一模一样！</code></pre>
+
+<div class="callout">
+  <strong>📊 关键洞察：输入输出 shape 相同</strong>
+  注意力模块的输入和输出 shape 完全一致：(B, L, 768) → (B, L, 768)。
+  这不是巧合，而是<strong>刻意设计</strong>——因为 Attention 和 FFN 要穿插使用，shape 不变才能叠加残差连接。
+  你将在 L11 看到这一点。
+</div>
+
+<!-- ====== 总结 ====== -->
+<hr>
+<h2>✅ 这节课你学会了</h2>
+
+<table>
+  <tr><th>操作</th><th>PyTorch 代码</th><th>Shape 变化</th></tr>
+  <tr><td>Q/K/V 投影</td><td><code>nn.Linear(D, D)</code></td><td>(B,L,D) → (B,L,D)</td></tr>
+  <tr><td>拆多头</td><td><code>.view + .transpose</code></td><td>(B,L,D) → (B,H,L,d_k)</td></tr>
+  <tr><td>点积注意力</td><td><code>Q @ K.T / sqrt(d_k)</code></td><td>→ (B,H,L,L)</td></tr>
+  <tr><td>因果遮罩</td><td><code>.masked_fill(mask==0, -inf)</code></td><td>上三角 = -inf</td></tr>
+  <tr><td>归一化</td><td><code>torch.softmax(..., dim=-1)</code></td><td>每行和为 1</td></tr>
+  <tr><td>加权 V</td><td><code>attn @ V</code></td><td>→ (B,H,L,d_k)</td></tr>
+  <tr><td>拼回 + 输出</td><td><code>.reshape + out_proj</code></td><td>→ (B,L,D)</td></tr>
+</table>
+
+<p>
+  <strong>这就是 Transformer 的心脏。</strong> 接下来的 L11，我们会把它和 FFN、残差连接、LayerNorm 一起装进 Transformer Block——
+  也就是那个会重复 12 次的结构。
+</p>
+
+<p style="color:var(--muted);font-size:0.9rem;">
+  ⚠️ 完整代码建议在 <a href="https://colab.research.google.com/" target="_blank" rel="noopener">Google Colab</a> 中运行验证。
+</p>
+
+<!-- ====== 导航 ====== -->
+<nav class="lesson-nav">
+  <a href="0009-embedding-position.html">← 上一课：Embedding + 位置编码</a>
+  <a href="0011-transformer-block.html">下一课：实现 Transformer Block →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>
+    第 10 课 · 实现注意力机制 —— 约 50 行代码实现 MultiHeadAttention。
+    从 Q/K/V 投影到多头拆分到因果遮罩，这是整个 GPT 模型里最值得反复阅读的一段代码。有问题随时回来问 Bib。
+  </p>
+</footer>
+
+<script>
+// ========== 因果遮罩可视化 ==========
+function renderCausalMask() {
+  const L = parseInt(document.getElementById('cm-len').value);
+  document.getElementById('cm-len-display').textContent = L;
+
+  let html = '<table class="attn-heatmap-table">';
+  html += '<tr><td></td>';
+  for (let j = 0; j < L; j++) html += '<td style="font-size:0.7rem;color:var(--muted);">j=' + j + '</td>';
+  html += '</tr>';
+  for (let i = 0; i < L; i++) {
+    html += '<tr><td style="font-size:0.7rem;color:var(--muted);">i=' + i + '</td>';
+    for (let j = 0; j < L; j++) {
+      if (j <= i) {
+        html += '<td style="background:#d4edda;color:#1b5e20;" title="i=' + i + ' 可以看到 j=' + j + '">✓</td>';
+      } else {
+        html += '<td class="masked" title="i=' + i + ' 不能看 j=' + j + '（未来）">✗</td>';
+      }
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  document.getElementById('causal-mask-display').innerHTML = html;
+}
+
+// ========== 注意力分数模拟 ==========
+function renderAttnSim() {
+  const tokens = ['我', '喜欢', '吃', '鱼'];
+  const focusPos = 2;  // "吃"
+  // Raw scores for "吃" attending to each position (before mask)
+  const rawScores = [3.2, 4.8, 1.5, 5.1];
+  const d_k = 8;
+  const scaled = rawScores.map(s => s / Math.sqrt(d_k));
+  // Apply causal mask (can only see up to pos 2)
+  const masked = scaled.map((s, i) => i <= focusPos ? s : -Infinity);
+  const exps = masked.map(s => s === -Infinity ? 0 : Math.exp(s));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  const probs = exps.map(e => e / sum);
+
+  let html = '<div style="font-size:0.8rem;margin-bottom:0.5rem;">';
+  html += '查询位置：<strong>位置 ' + focusPos + '「' + tokens[focusPos] + '」</strong>的 Q 与各位置的 K 匹配</div>';
+
+  html += '<div style="margin-bottom:0.75rem;">';
+  for (let i = 0; i < 4; i++) {
+    const pct = (probs[i] * 100);
+    const color = i > focusPos ? '#ccc' : (pct > 30 ? '#66bb6a' : '#ffb74d');
+    const status = i > focusPos ? '  🚫因果遮罩' : '';
+    html += '<div class="score-bar-wrap">';
+    html += '<span class="bar-label">' + tokens[i] + '</span>';
+    html += '<span class="bar-bg"><span class="bar-fill" style="width:' + pct + '%;background:' + color + ';"></span></span>';
+    html += '<span style="width:3.5rem;font-family:JetBrains Mono,Consolas,monospace;font-size:0.75rem;">' + probs[i].toFixed(3) + '</span>';
+    html += '<span style="font-size:0.7rem;color:var(--muted);">' + status + '</span>';
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<p style="font-size:0.75rem;color:var(--muted);">';
+  html += '注意：「鱼」(位置3)尽管原始分数最高(5.1)，但被因果遮罩强制设为 0——「吃」不能偷看后面的「鱼」。<br>';
+  html += '训练时，模型只靠过去信息来预测——这才是真正的「语言建模」。</p>';
+
+  document.getElementById('attn-sim-display').innerHTML = html;
+}
+
+renderCausalMask();
+renderAttnSim();
+</script>
+</body>
+</html>

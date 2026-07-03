@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第12课 · 组装完整 GPT-2 模型</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .arch-diagram {
+    margin: 1.25rem 0;
+    padding: 1rem 1.25rem;
+    background: var(--code-bg);
+    border-radius: 10px;
+    border: 1px solid var(--rule);
+    font-family: "JetBrains Mono","Cascadia Code",Consolas,monospace;
+    font-size: 0.78rem;
+    line-height: 1.9;
+  }
+  .arch-diagram .layer-name {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 3px;
+    font-weight: 700;
+    font-size: 0.73rem;
+  }
+  .l-emb { background: #e3f2fd; color: #1565c0; }
+  .l-block { background: #fff3e0; color: #e65100; }
+  .l-ln { background: #e8f5e9; color: #2e7d32; }
+  .l-out { background: #fce4ec; color: #c62828; }
+  @media (prefers-color-scheme: dark) {
+    .l-emb { background: #0d2137; color: #90caf9; }
+    .l-block { background: #3e2723; color: #ffcc80; }
+    .l-ln { background: #1b3a1b; color: #a5d6a7; }
+    .l-out { background: #3e1a1a; color: #ef9a9a; }
+  }
+
+  .param-calc { margin: 1.25rem 0; }
+  .param-calc .param-row { display: flex; justify-content: space-between; padding: 0.3rem 0; border-bottom: 1px dotted var(--rule); font-family: "JetBrains Mono",Consolas,monospace; font-size: 0.8rem; }
+  .param-calc .param-total { font-weight: 700; font-size: 0.9rem; border-top: 2px solid var(--rule); padding-top: 0.4rem; margin-top: 0.3rem; }
+
+  .code-annotated { margin: 1rem 0; }
+  .code-annotated .line { display: flex; gap: 0.75rem; font-family: "JetBrains Mono","Cascadia Code",Consolas,monospace; font-size: 0.8rem; line-height: 1.7; }
+  .code-annotated .line .code { flex: 0 0 auto; min-width: 380px; color: var(--text); }
+  .code-annotated .line .note { color: var(--muted); font-family: "Source Serif 4","Noto Serif CJK SC",serif; font-size: 0.78rem; }
+
+  .experiment { margin: 1.5rem 0; border: 2px solid var(--rule); border-radius: 10px; padding: 1.25rem; background: var(--code-bg); }
+
+  @media (max-width: 640px) {
+    .code-annotated .line { flex-direction: column; gap: 0.1rem; }
+    .code-annotated .line .code { min-width: auto; }
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🏆 第12课 · 组装完整 GPT-2 模型</h1>
+
+<h2>最后一步：把所有零件拼起来</h2>
+
+<p>
+  从 L8 到 L11，你分别实现了张量运算、输入层、注意力机制、Transformer Block。
+  这节课把它们组装成一个<strong>能接受 token ID 输入、输出概率分布的完整 GPT 模型</strong>。
+</p>
+
+<!-- ====== 架构总览 ====== -->
+<h2>GPT-2 架构总览</h2>
+
+<div class="arch-diagram">
+  <span style="color:var(--muted);">输入 Token IDs (B, L)</span><br>
+  &nbsp;&nbsp;↓<br>
+  <span class="layer-name l-emb">Token Embedding</span> + <span class="layer-name l-emb">Position Embedding</span> <span style="color:var(--muted);">← L9</span><br>
+  &nbsp;&nbsp;↓ &nbsp;(B, L, 768)<br>
+  <span class="layer-name l-ln">Dropout</span><br>
+  &nbsp;&nbsp;↓<br>
+  <span class="layer-name l-block">Transformer Block 0</span> <span style="color:var(--muted);">← L11</span><br>
+  <span class="layer-name l-block">Transformer Block 1</span><br>
+  &nbsp;&nbsp;···<br>
+  <span class="layer-name l-block">Transformer Block 11</span> <span style="color:var(--muted);">×12 层</span><br>
+  &nbsp;&nbsp;↓ &nbsp;(B, L, 768)<br>
+  <span class="layer-name l-ln">LayerNorm (final)</span><br>
+  &nbsp;&nbsp;↓<br>
+  <span class="layer-name l-out">Linear → vocab_size</span> <span style="color:var(--muted);">768 → 50257</span><br>
+  &nbsp;&nbsp;↓<br>
+  <span style="color:var(--muted);">输出 Logits (B, L, vocab_size)</span>
+</div>
+
+<p>
+  就这些。GPT-2 small（124M 参数版本）没有更多的东西了。
+  12 层 Block、768 维向量、12 个注意力头——这些数字就是 GPT-2 small 的全部超参数。
+</p>
+
+<!-- ====== 概念一：输出层 ====== -->
+<h2>概念一：输出层 —— 从向量回到词</h2>
+
+<p>
+  Transformer 输出的是 768 维的向量，但我们需要的是「下一个 token 是什么」——需要回到词表空间（50257 维）。
+  输出层就是最后一个 <code>nn.Linear</code>：
+</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">self.out_head = nn.Linear(768, 50257, bias=False)</span><span class="note">把每个 token 的 768 维向量投影到 50257 维</span></div>
+  <div class="line"><span class="code">logits = self.out_head(x)</span><span class="note">(B, L, 768) → (B, L, 50257)</span></div>
+  <div class="line"><span class="code"># logits[0, 5, :]  = 第 0 句话第 5 个位置上，50257 个 token 各自的「分数」</span><span class="note">分数最高的那个 token = 模型预测的下一个 token</span></div>
+</div>
+
+<div class="callout">
+  <strong>💡 一个有趣的设计选择</strong><br>
+  GPT-2 的输出层权重与输入 Embedding 权重是<strong>共享的</strong>（Weight Tying）。
+  这意味着 <code>out_head.weight = tok_embed.weight</code> ——同一个矩阵既用来把 token ID 转成向量（查表），
+  也用来把向量转回 token 概率（投影）。这种做法节省了 38M 参数（近 1/3），且效果几乎不下降。
+</div>
+
+<!-- ====== 概念二：GPTModel ====== -->
+<h2>概念二：GPTModel 完整代码</h2>
+
+<pre><code>import torch
+import torch.nn as nn
+import math
+
+class GPTModel(nn.Module):
+    """GPT-2 small (124M parameters) 的完整实现"""
+
+    def __init__(self, vocab_size=50257, d_model=768, num_heads=12,
+                 num_layers=12, max_seq_len=1024, dropout=0.1):
+        super().__init__()
+
+        # --- 1. 输入层（L9） ---
+        self.tok_embed = nn.Embedding(vocab_size, d_model)
+        self.pos_embed = nn.Embedding(max_seq_len, d_model)
+        self.dropout_emb = nn.Dropout(dropout)
+
+        # --- 2. Transformer Blocks（L11）× 12 ---
+        self.blocks = nn.ModuleList([
+            TransformerBlock(d_model, num_heads, dropout)
+            for _ in range(num_layers)
+        ])
+
+        # --- 3. 最终 LayerNorm ---
+        self.ln_final = nn.LayerNorm(d_model)
+
+        # --- 4. 输出层：向量 → 词表分数 ---
+        self.out_head = nn.Linear(d_model, vocab_size, bias=False)
+
+        # --- 参数初始化 ---
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def forward(self, token_ids):
+        B, L = token_ids.shape
+
+        # Step 1: 词嵌入 + 位置编码
+        tok_emb = self.tok_embed(token_ids)                       # (B, L, D)
+        pos_ids = torch.arange(L, device=token_ids.device)
+        pos_emb = self.pos_embed(pos_ids)                         # (L, D)
+        x = self.dropout_emb(tok_emb + pos_emb)                   # (B, L, D)
+
+        # Step 2: 过 12 层 Transformer Block
+        for block in self.blocks:
+            x = block(x)                                          # shape 不变！
+
+        # Step 3: 最终 LayerNorm
+        x = self.ln_final(x)
+
+        # Step 4: 输出投影 → 词表分数
+        logits = self.out_head(x)                                 # (B, L, vocab_size)
+
+        return logits
+
+
+# ===== 测试：随机输入 → 验证 shape =====
+model = GPTModel()
+dummy_ids = torch.randint(0, 50257, (2, 512))  # 2 句话，每句 512 token
+logits = model(dummy_ids)
+
+print(f"输入: {dummy_ids.shape}")   # (2, 512)
+print(f"输出: {logits.shape}")      # (2, 512, 50257)
+print(f"最后位置预测下一个 token：取 logits[:, -1, :].argmax(dim=-1)")
+
+# 预测下一个 token
+next_token = logits[:, -1, :].argmax(dim=-1)
+print(f"预测的下一个 token ID: {next_token}")  # 随机（因为还没训练）
+
+# ===== 参数统计 =====
+total = sum(p.numel() for p in model.parameters())
+print(f"总参数量: {total:,}")        # 约 124M
+print(f"可训练参数: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")</code></pre>
+
+<div class="callout">
+  <strong>🔗 与 HuggingFace GPT-2 的对应关系</strong><br>
+  上面的 <code>GPTModel</code> 结构与 HuggingFace 的 <code>GPT2Model</code> 基本一致：<br>
+  • <code>self.tok_embed</code> ≈ <code>wte</code>（Word Token Embedding）<br>
+  • <code>self.pos_embed</code> ≈ <code>wpe</code>（Word Position Embedding）<br>
+  • <code>self.blocks</code> ≈ <code>h</code>（12 层 Block）<br>
+  • <code>self.ln_final</code> ≈ <code>ln_f</code><br>
+  • <code>self.out_head</code> 在 HF 里共享 wte（Weight Tying）<br><br>
+  如果你的代码输出和 HuggingFace 的 GPT-2 在相同输入下完全一致——<strong>那说明你的实现是正确的</strong>。
+</div>
+
+<!-- 交互：参数计算器 -->
+<div class="experiment">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：GPT 参数计算器</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    调整模型配置，实时计算参数量。理解每个配置参数如何影响总参数量，以及参数都花在了哪里。
+  </p>
+  <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;margin-bottom:1rem;">
+    <div>
+      <label style="font-size:0.75rem;font-weight:600;display:block;">d_model</label>
+      <input type="number" id="pc-dim" value="768" min="64" max="2048" step="64" style="width:5rem;padding:0.25rem;" onchange="calcParams()">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;font-weight:600;display:block;">num_heads</label>
+      <input type="number" id="pc-heads" value="12" min="1" max="32" step="1" style="width:5rem;padding:0.25rem;" onchange="calcParams()">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;font-weight:600;display:block;">num_layers</label>
+      <input type="number" id="pc-layers" value="12" min="1" max="96" step="1" style="width:5rem;padding:0.25rem;" onchange="calcParams()">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;font-weight:600;display:block;">vocab_size</label>
+      <input type="number" id="pc-vocab" value="50257" min="1000" max="200000" step="1000" style="width:5rem;padding:0.25rem;" onchange="calcParams()">
+    </div>
+    <div>
+      <label style="font-size:0.75rem;font-weight:600;display:block;">max_seq_len</label>
+      <input type="number" id="pc-seq" value="1024" min="128" max="8192" step="128" style="width:5rem;padding:0.25rem;" onchange="calcParams()">
+    </div>
+    <button onclick="calcParams()" style="padding:0.35rem 0.8rem;font-size:0.85rem;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;">计算</button>
+  </div>
+  <div class="param-calc" id="param-calc-display"></div>
+  <div style="font-size:0.78rem;color:var(--muted);margin-top:0.5rem;">
+    💡 试试：GPT-2 small (768/12/12) ≈ 124M | GPT-2 medium (1024/16/24) ≈ 350M |
+    GPT-2 large (1280/20/36) ≈ 774M | GPT-2 XL (1600/25/48) ≈ 1.5B
+  </div>
+</div>
+
+<!-- ====== 总结 ====== -->
+<hr>
+<h2>✅ Phase 2 全部完成！你学会了</h2>
+
+<table>
+  <tr><th>课次</th><th>内容</th><th>核心代码</th><th>行数</th></tr>
+  <tr><td>L8</td><td>PyTorch 基础</td><td>张量、nn.Linear、autograd</td><td>—</td></tr>
+  <tr><td>L9</td><td>输入层</td><td><code>GPTInputLayer</code></td><td>~20</td></tr>
+  <tr><td>L10</td><td>注意力机制</td><td><code>MultiHeadAttention</code></td><td>~50</td></tr>
+  <tr><td>L11</td><td>Transformer Block</td><td><code>TransformerBlock</code></td><td>~20</td></tr>
+  <tr><td>L12</td><td>完整 GPT 模型</td><td><code>GPTModel</code></td><td>~40</td></tr>
+  <tr><td colspan="2"><strong>合计</strong></td><td colspan="2"><strong>约 150 行核心代码 = 一个能跑的 GPT-2</strong></td></tr>
+</table>
+
+<p>
+  从零基础到拥有一个 124M 参数的 GPT-2 模型代码——你用 12 节课走完了这个旅程。
+  下一步（Phase 3）是在真实数据上训练它，让它真正学会生成文本。
+</p>
+
+<!-- ====== 导航 ====== -->
+<nav class="lesson-nav">
+  <a href="0011-transformer-block.html">← 上一课：Transformer Block</a>
+  <a href="../index.html">🏠 回到树屋总览</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>
+    第 12 课 · 组装完整 GPT-2 模型 —— Phase 2 代码实现的终点。
+    <strong>约 150 行代码，从 token ID 到概率分布，完整复现 GPT-2 small。</strong><br>
+    真正的理解来自于动手跑代码——去 Colab 上跑一遍，改改参数，看看会怎样。
+    有问题随时回来问 Bib。🌳
+  </p>
+</footer>
+
+<script>
+// ========== 参数计算器 ==========
+function calcParams() {
+  const d = parseInt(document.getElementById('pc-dim').value) || 768;
+  const h = parseInt(document.getElementById('pc-heads').value) || 12;
+  const L = parseInt(document.getElementById('pc-layers').value) || 12;
+  const V = parseInt(document.getElementById('pc-vocab').value) || 50257;
+  const maxL = parseInt(document.getElementById('pc-seq').value) || 1024;
+
+  const d_k = d / h;
+
+  // Token embedding: V * d
+  const p_tok = V * d;
+  // Position embedding: maxL * d
+  const p_pos = maxL * d;
+
+  // Per block:
+  // Attention: W_Q(d*d) + W_K(d*d) + W_V(d*d) + W_O(d*d) = 4*d*d
+  const p_attn = 4 * d * d;
+  // FFN: W1(d*4d) + W2(4d*d) = 8*d*d
+  const p_ffn = 8 * d * d;
+  // LayerNorm × 2: 2 * (2 * d) = 4d
+  const p_ln = 4 * d;
+  // Per block total
+  const p_block = p_attn + p_ffn + p_ln;
+
+  // All blocks
+  const p_blocks = L * p_block;
+
+  // Final LN: 2*d
+  const p_final_ln = 2 * d;
+
+  // Output head (no weight tying assumed): V * d
+  // With weight tying, this would be 0. We'll show both.
+  const p_out = V * d;
+
+  let html = '';
+  html += '<div class="param-row"><span>📋 词嵌入 (Token Embedding)</span><span>' + p_tok.toLocaleString() + '</span></div>';
+  html += '<div class="param-row"><span>📍 位置嵌入 (Position Embedding)</span><span>' + p_pos.toLocaleString() + '</span></div>';
+  html += '<div class="param-row"><span>🧱 ' + L + ' 层 Block ×' + L + '</span><span>' + p_blocks.toLocaleString() + '</span></div>';
+  html += '<div class="param-row" style="font-size:0.73rem;color:var(--muted);"><span>  其中 Attention (4×' + d + '²)</span><span>' + (p_attn * L).toLocaleString() + '</span></div>';
+  html += '<div class="param-row" style="font-size:0.73rem;color:var(--muted);"><span>  其中 FFN (8×' + d + '²)</span><span>' + (p_ffn * L).toLocaleString() + '</span></div>';
+  html += '<div class="param-row" style="font-size:0.73rem;color:var(--muted);"><span>  其中 LayerNorm</span><span>' + (p_ln * L).toLocaleString() + '</span></div>';
+  html += '<div class="param-row"><span>📏 最终 LayerNorm</span><span>' + p_final_ln.toLocaleString() + '</span></div>';
+
+  const total_with_head = p_tok + p_pos + p_blocks + p_final_ln + p_out;
+  const total_weight_tie = p_tok + p_pos + p_blocks + p_final_ln;
+
+  html += '<div class="param-total"><span>🧮 总参数量（独立输出层）</span><span>' + total_with_head.toLocaleString() + '</span></div>';
+  html += '<div class="param-row" style="font-size:0.8rem;"><span>🧮 总参数量（Weight Tying，GPT-2 实际）</span><span><strong>' + total_weight_tie.toLocaleString() + '</strong></span></div>';
+
+  const mb = total_with_head / (1024 * 1024);
+  html += '<div style="font-size:0.73rem;color:var(--muted);margin-top:0.5rem;">';
+  html += '≈ ' + (total_with_head / 1e6).toFixed(1) + 'M 参数（独立输出）/ ' + (total_weight_tie / 1e6).toFixed(1) + 'M（Weight Tying）<br>';
+  html += '若用 FP32 存储：' + (total_with_head * 4 / (1024 * 1024)).toFixed(0) + ' MB | FP16：' + (total_with_head * 2 / (1024 * 1024)).toFixed(0) + ' MB';
+  html += '</div>';
+
+  document.getElementById('param-calc-display').innerHTML = html;
+}
+
+calcParams();
+</script>
+</body>
+</html>
