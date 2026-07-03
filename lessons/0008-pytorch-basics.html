@@ -107,6 +107,15 @@
     font-weight: bold;
     color: var(--muted);
   }
+  /* 矩阵乘法高亮样式 */
+  .matmul-viz td.hl-row { background: #ffd54f; color: #3e2723; font-weight: 700; }
+  .matmul-viz td.hl-col { background: #ffb74d; color: #3e2723; font-weight: 700; }
+  .matmul-viz td.hl-result { background: #81c784; color: #1b5e20; font-weight: 700; }
+  @media (prefers-color-scheme: dark) {
+    .matmul-viz td.hl-row { background: #5d4037; color: #ffecb3; }
+    .matmul-viz td.hl-col { background: #4e342e; color: #ffcc80; }
+    .matmul-viz td.hl-result { background: #2e7d32; color: #c8e6c9; }
+  }
 
   /* 自动求导模拟器 */
   .autograd-demo {
@@ -291,6 +300,101 @@
   <dt><code>torch.softmax(x, dim=-1)</code> — Softmax 归一化</dt>
   <dd>把任意一串数变成「概率分布」（和为 1）。L4 注意力里的核心操作，一模一样。</dd>
 </dl>
+
+<!-- ====== 概念二.5：点乘详解 ====== -->
+<h2 id="dot-product">插播：什么是「点乘」？ 🎯</h2>
+
+<p>
+  在矩阵乘法和注意力的讲解中，你会反复听到「点乘」这个词。它是整个大模型数学里出现频率最高的运算。
+  不搞懂它，后面的东西就都像在看天书。
+</p>
+
+<h3>一句话定义</h3>
+
+<blockquote>
+  <strong>点乘 = 对应位置相乘，再把所有乘积加起来。</strong><br>
+  两个等长向量 → 一个数字（标量）。
+</blockquote>
+
+<h3>手算一个例子</h3>
+
+<p>假设有两个 3 维向量：</p>
+
+<pre><code>v1 = [2, 3, 1]      （可以想象成「查询向量 Q」）
+v2 = [4, 0, 2]      （可以想象成「被查向量 K」）</code></pre>
+
+<p><strong>第一步：对应位置相乘</strong></p>
+
+<pre><code>位置 0:  2 × 4 = 8
+位置 1:  3 × 0 = 0
+位置 2:  1 × 2 = 2</code></pre>
+
+<p><strong>第二步：把乘积全部加起来</strong></p>
+
+<pre><code>点乘结果 = 8 + 0 + 2 = <strong>10</strong></code></pre>
+
+<p>所以 v1·v2 = 10。一个数字，来自两个向量的「协同工作」。</p>
+
+<h3>这个数字是什么意思？</h3>
+
+<p>
+  点乘结果的大小反映了两个向量的<strong>「方向一致性」</strong>：
+</p>
+
+<ul>
+  <li><strong>结果大（正数）</strong> → 两个向量指向相似方向 → 它们「相关」</li>
+  <li><strong>结果接近 0</strong> → 两个向量几乎垂直 → 它们「无关」</li>
+  <li><strong>结果负</strong> → 两个向量指向相反方向 → 它们「负相关」</li>
+</ul>
+
+<p>
+  在注意力机制（L4）里，<strong>Q·K 的点乘结果就是「相关性分数」</strong>——
+  「猫」的 Q 和「喜欢」的 K 点乘结果大，说明「猫」这个词需要关注「喜欢」。
+</p>
+
+<h3>点乘和矩阵乘法的关系</h3>
+
+<p>这是最关键的关系：</p>
+
+<blockquote>
+  <strong>矩阵乘法 C = A × B 的每一个格子，都是 A 的某一行 与 B 的某一列 做点乘。</strong>
+</blockquote>
+
+<pre><code>C[i][j] = (A 的第 i 行) · (B 的第 j 列)</code></pre>
+
+<p>
+  所以一个 2×3 的矩阵 A 乘以 3×2 的矩阵 B，需要算 <strong>4 次点乘</strong>（结果矩阵 C 有 4 个格子）。
+  每次点乘涉及 3 个元素的乘加（因为 A 的列数 = B 的行数 = 3）。
+</p>
+
+<!-- 小型点乘交互演示 -->
+<div class="tensor-viz">
+  <h4>🔬 动手试试：点乘计算器</h4>
+  <p style="font-size:0.88rem; color:var(--muted);">
+    调整向量各位置的值，观察点乘结果如何变化。试着让两个向量「同向」（值大的位置对齐）和「反向」（正负交错），看点乘结果的正负大小。
+  </p>
+  <div class="shape-controls" style="gap:1.5rem;">
+    <div style="display:flex;align-items:center;gap:0.3rem;">
+      <span style="font-weight:600;">v₁:</span>
+      <input type="number" id="dp-a0" value="2" step="1" style="width:4rem;" onchange="renderDotProduct()">
+      <input type="number" id="dp-a1" value="3" step="1" style="width:4rem;" onchange="renderDotProduct()">
+      <input type="number" id="dp-a2" value="1" step="1" style="width:4rem;" onchange="renderDotProduct()">
+    </div>
+    <span style="font-size:1.2rem;font-weight:bold;">·</span>
+    <div style="display:flex;align-items:center;gap:0.3rem;">
+      <span style="font-weight:600;">v₂:</span>
+      <input type="number" id="dp-b0" value="4" step="1" style="width:4rem;" onchange="renderDotProduct()">
+      <input type="number" id="dp-b1" value="0" step="1" style="width:4rem;" onchange="renderDotProduct()">
+      <input type="number" id="dp-b2" value="2" step="1" style="width:4rem;" onchange="renderDotProduct()">
+    </div>
+  </div>
+  <div id="dotproduct-display" style="margin-top:0.75rem;font-family:'JetBrains Mono',Consolas,monospace;font-size:0.85rem;"></div>
+</div>
+
+<p style="margin-top:1rem;">
+  理解了点乘，再回头看下面的矩阵乘法可视化——每个结果格子就是一次点乘。
+  点击任意结果格子，看看是<strong>哪两个向量</strong>在做点乘，中间每一步又是怎么乘、怎么加的。
+</p>
 
 <!-- 交互：矩阵乘法可视化 -->
 <div class="tensor-viz">
@@ -594,14 +698,61 @@ function showMatmulStep(i, j) {
     'C[' + i + '][' + j + '] = ' + steps.join(' + ') + ' = ' + total +
     '（A 的第 ' + (i+1) + ' 行 点乘 B 的第 ' + (j+1) + ' 列）';
 
-  // Highlight
+  // Clear all highlights
   const allCells = document.querySelectorAll('#matmul-display td');
-  allCells.forEach(c => c.style.background = '');
+  allCells.forEach(c => { c.className = ''; });
+
+  // Highlight A's row and B's column
   for (let k = 0; k < 3; k++) {
-    document.getElementById('a-' + i + '-' + k).style.background = '#fff3cd';
-    document.getElementById('b-' + k + '-' + j).style.background = '#fff3cd';
+    document.getElementById('a-' + i + '-' + k).className = 'hl-row';
+    document.getElementById('b-' + k + '-' + j).className = 'hl-col';
   }
-  document.getElementById('res-' + i + '-' + j).style.background = '#d4edda';
+  document.getElementById('res-' + i + '-' + j).className = 'hl-result';
+}
+
+// ========== 点乘计算器 ==========
+function renderDotProduct() {
+  const a = [
+    parseInt(document.getElementById('dp-a0').value) || 0,
+    parseInt(document.getElementById('dp-a1').value) || 0,
+    parseInt(document.getElementById('dp-a2').value) || 0,
+  ];
+  const b = [
+    parseInt(document.getElementById('dp-b0').value) || 0,
+    parseInt(document.getElementById('dp-b1').value) || 0,
+    parseInt(document.getElementById('dp-b2').value) || 0,
+  ];
+  const products = [a[0]*b[0], a[1]*b[1], a[2]*b[2]];
+  const result = products[0] + products[1] + products[2];
+
+  let html = '';
+  html += '<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">';
+  html += '<span style="color:var(--muted);">计算：</span>';
+  html += '<span>' + a[0] + '×' + b[0] + '</span><span style="color:var(--muted);"> + </span>';
+  html += '<span>' + a[1] + '×' + b[1] + '</span><span style="color:var(--muted);"> + </span>';
+  html += '<span>' + a[2] + '×' + b[2] + '</span>';
+  html += '<span style="color:var(--muted);"> = </span>';
+  html += '<span style="color:var(--faint);">' + products[0] + ' + ' + products[1] + ' + ' + products[2] + '</span>';
+  html += '<span style="color:var(--muted);"> = </span>';
+  html += '<strong style="font-size:1.1rem;">' + result + '</strong>';
+  html += '</div>';
+
+  // Visual bar: show each product's contribution
+  const maxAbs = Math.max(Math.abs(products[0]), Math.abs(products[1]), Math.abs(products[2]), 1);
+  html += '<div style="margin-top:0.6rem;font-size:0.75rem;color:var(--muted);">各位置的贡献（条长 = 乘积大小，绿色=正贡献，红色=负贡献）：</div>';
+  for (let i = 0; i < 3; i++) {
+    const pct = Math.abs(products[i]) / maxAbs * 100;
+    const color = products[i] >= 0 ? '#66bb6a' : '#ef5350';
+    html += '<div style="display:flex;align-items:center;gap:0.4rem;margin:0.15rem 0;font-size:0.78rem;">';
+    html += '<span style="width:2rem;text-align:right;font-weight:600;">位置' + i + '</span>';
+    html += '<span style="flex:1;height:14px;background:var(--bg);border-radius:3px;overflow:hidden;border:1px solid var(--rule);">';
+    html += '<span style="display:inline-block;height:100%;width:' + pct + '%;background:' + color + ';border-radius:2px;"></span></span>';
+    html += '<span style="width:3rem;font-family:JetBrains Mono,Consolas,monospace;">' + (products[i] >= 0 ? '+' : '') + products[i] + '</span>';
+    html += '</div>';
+  }
+  html += '<div style="margin-top:0.4rem;font-size:0.8rem;color:var(--text);"><strong>点乘结果 = ' + result + '</strong></div>';
+
+  document.getElementById('dotproduct-display').innerHTML = html;
 }
 
 // ========== autograd 模拟器 ==========
@@ -649,6 +800,7 @@ function runAutogradDemo() {
 // ========== 初始化 ==========
 renderTensor();
 renderMatmul();
+renderDotProduct();
 runAutogradDemo();
 </script>
 </body>
