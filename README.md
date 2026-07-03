@@ -1,7 +1,8 @@
 # 🌳 Bob 的学习树屋 —— 从零理解大语言模型
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![lessons](https://img.shields.io/badge/lessons-10%20completed-brightgreen)](lessons/)
+[![lessons](https://img.shields.io/badge/lessons-23%20completed-brightgreen)](lessons/)
+[![phase](https://img.shields.io/badge/phases-6%2F6%20done-success)]()
 [![status](https://img.shields.io/badge/status-actively%20maintained-blue)]()
 
 一套面向**零基础学习者**的大语言模型（LLM）课程。不需要计算机学位，不需要提前装 Python，甚至不需要懂命令行——打开浏览器就行了。
@@ -16,14 +17,14 @@
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/ShuJu575/llm-learning-treehouse.git
+git clone https://github.com/fubob13013-afk/llm-from-scratch.git
 
 # 2. 打开主页
 # 用浏览器打开 index.html 即可浏览全部课程
 # 或者直接用文件管理器双击 index.html
 ```
 
-你也可以直接从 [GitHub Pages](#) 在线浏览（即将上线）。
+在线浏览：**[bob-llm-treehouse.netlify.app](https://bob-llm-treehouse.netlify.app)**
 
 ---
 
@@ -43,10 +44,10 @@ git clone https://github.com/ShuJu575/llm-learning-treehouse.git
 |------|------|------|------|
 | **Phase 0** | 前置基础 | 3 课 | ✅ 已完成 |
 | **Phase 1** | 核心原理 | 7 课 | ✅ 已完成 |
-| **Phase 2** | 代码实现 (PyTorch) | 5 课 | 🔜 开发中 |
-| **Phase 3** | 训练实战 | 4 课 | 🔜 规划中 |
-| **Phase 4** | 理解与优化 | 3 课 | 🔜 规划中 |
-| **Phase 5** | 进阶方向 | 选修 | 🔜 规划中 |
+| **Phase 2** | 代码实现 (PyTorch) | 5 课 | ✅ 已完成 |
+| **Phase 3** | 训练实战 | 4 课 | ✅ 已完成 |
+| **Phase 4** | 理解与优化 | 3 课 | ✅ 已完成 |
+| **Phase 5** | 进阶方向 | 1 课 | ✅ 已完成 |
 
 ### Phase 0 · 前置基础 ✅
 
@@ -68,9 +69,40 @@ git clone https://github.com/ShuJu575/llm-learning-treehouse.git
 | L6 | [训练循环](lessons/0006-training-loop.html) | 交叉熵 · 梯度下降 · 反向传播 | 3 个交互实验 |
 | L7 | [GPT 组装与生成](lessons/0007-gpt-assembly.html) | 完整架构 · 自回归解码 · 采样 | Temperature 采样实验室 |
 
-### Phase 2~5 · 即将更新 🔜
+### Phase 2 · 代码实现 ✅
 
-后续课程规划详见 [LEARNING-ROADMAP.md](LEARNING-ROADMAP.md)。最终目标是：**让每个认真学完的人都能从零训练一个自己的微型 GPT。**
+| 编号 | 课程 | 核心代码 | 交互实验 |
+|------|------|---------|---------|
+| L8 | [PyTorch 基础](lessons/0008-pytorch-basics.html) | 张量 · nn.Linear · autograd | 张量探索 · 矩阵乘法 · 点乘计算器 |
+| L9 | [Embedding + 位置编码](lessons/0009-embedding-position.html) | GPTInputLayer 类 | 查表演示 · 热力图 · 输入组装 |
+| L10 | [注意力机制](lessons/0010-attention-implementation.html) | MultiHeadAttention 类 | 因果遮罩 · 注意力权重 |
+| L11 | [Transformer Block](lessons/0011-transformer-block.html) | TransformerBlock 类 | 7步数据流追踪 |
+| L12 | [组装 GPT-2](lessons/0012-gpt2-full.html) | GPTModel 类 ~150行 | GPT参数计算器 |
+
+### Phase 3 · 训练实战 ✅
+
+| 编号 | 课程 | 核心内容 | 交互实验 |
+|------|------|---------|---------|
+| L13 | [数据准备实战](lessons/0013-data-preparation.html) | 滑动窗口 · DataLoader | 窗口可视化 · Batch查看器 |
+| L14 | [训练循环实战](lessons/0014-training-loop.html) | 五步循环 · 学习率调度 · checkpoint | 训练模拟器(loss曲线) |
+| L15 | [云端训练](lessons/0015-cloud-training.html) | Colab · AutoDL 教程 | — |
+| L16 | [文本生成实战](lessons/0016-text-generation.html) | generate() · Temperature/Top-K | 逐token生成演示 |
+
+### Phase 4 · 理解与优化 ✅
+
+| 编号 | 课程 | 核心内容 | 交互实验 |
+|------|------|---------|---------|
+| L17 | [参数计算与缩放](lessons/0017-param-scaling.html) | 逐组件公式 · Chinchilla 定律 | 模型族缩放对比 |
+| L18 | [训练技巧](lessons/0018-training-techniques.html) | warmup · 梯度裁剪 · 混合精度 | LR调度曲线图 |
+| L19 | [评估方法](lessons/0019-evaluation.html) | Perplexity · Benchmark · 人工评估 | — |
+
+### Phase 5 · 进阶方向 ✅
+
+| 编号 | 方向 | 核心内容 |
+|------|------|---------|
+| L20 | [进阶方向总览](lessons/0020-phase5-overview.html) | A.微调对齐 · B.量化部署 · C.多模态 · D.Agent工具 |
+
+详细路线图见 [LEARNING-ROADMAP.md](LEARNING-ROADMAP.md)。
 
 ---
 
@@ -97,17 +129,13 @@ git clone https://github.com/ShuJu575/llm-learning-treehouse.git
 ├── assets/                 # 共享资源
 │   ├── style.css           #   全局样式表（Tufte 风格）
 │   └── python-interpreter.js # 浏览器端 Python 解释器
-├── lessons/                # 📚 课程文件（纯 HTML）
-│   ├── 0000-01-command-line.html
-│   ├── 0000-02-python-basics-1.html
-│   ├── 0000-03-python-basics-2.html
-│   ├── 0001-llm-lifecycle.html
-│   ├── 0002-data-preparation.html
-│   ├── 0003-embedding.html
-│   ├── 0004-attention.html
-│   ├── 0005-feedforward-residual.html
-│   ├── 0006-training-loop.html
-│   └── 0007-gpt-assembly.html
+├── lessons/                # 📚 课程文件（纯 HTML，23 课）
+│   ├── 0000-01~03          # Phase 0: 前置基础 (3课)
+│   ├── 0001~0007           # Phase 1: 核心原理 (7课)
+│   ├── 0008~0012           # Phase 2: 代码实现 (5课)
+│   ├── 0013~0016           # Phase 3: 训练实战 (4课)
+│   ├── 0017~0019           # Phase 4: 理解优化 (3课)
+│   └── 0020                # Phase 5: 进阶方向 (1课)
 ├── lessons_backup/         # v1.0 原始版本备份
 └── learning-records/       # 学习记录（Bob 的课后笔记）
 ```
@@ -144,7 +172,7 @@ git clone https://github.com/ShuJu575/llm-learning-treehouse.git
 
 ## 🔧 如何贡献
 
-1. **报告错误** — 在 [Issues](https://github.com/ShuJu575/llm-learning-treehouse/issues) 中描述你发现的问题
+1. **报告错误** — 在 [Issues](https://github.com/fubob13013-afk/llm-from-scratch/issues) 中描述你发现的问题
 2. **改进现有课程** — Fork → 修改 → 提交 PR
 3. **贡献新课程** — 参考 [LEARNING-ROADMAP.md](LEARNING-ROADMAP.md) 中未完成的课程，按照「概念 → 例子 → 原型」格式编写
 4. **改进可访问性** — 帮助优化移动端体验、暗色模式、屏幕阅读器支持
