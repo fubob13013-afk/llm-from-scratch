@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第5课 · Transformer Block — 为什么需要「重复多次」以及每一轮里发生了什么</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .block-diagram {
+    margin: 1.5rem 0;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  }
+  .block-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.25rem 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .block-box {
+    padding: 0.45rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .block-box.attn   { background: #e8f0fe; border: 2px solid #6a9fb5; }
+  .block-box.ffn    { background: #fef0e8; border: 2px solid #c99a6a; }
+  .block-box.norm   { background: #f0f0f0; border: 1px solid #bbb; }
+  .block-box.resid  { background: #e8fce8; border: 1px solid #6aa86a; font-size:0.7rem; }
+  @media (prefers-color-scheme: dark) {
+    .block-box.attn  { background: #1a2a30; }
+    .block-box.ffn   { background: #2a2018; }
+    .block-box.norm  { background: #252525; }
+    .block-box.resid { background: #182818; }
+  }
+  .block-plus {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex: 0 0 auto;
+  }
+  .block-arrow {
+    color: var(--faint);
+    font-size: 1.1rem;
+    flex: 0 0 auto;
+  }
+
+  .ln-steps {
+    counter-reset: ln-step;
+    margin: 1.25rem 0;
+  }
+  .ln-step {
+    counter-increment: ln-step;
+    margin: 0.5rem 0;
+    padding: 0.45rem 0.7rem 0.45rem 2.3rem;
+    position: relative;
+    background: var(--code-bg);
+    border-radius: 6px;
+    font-size: 0.83rem;
+  }
+  .ln-step::before {
+    content: counter(ln-step);
+    position: absolute;
+    left: 0.45rem;
+    top: 0.45rem;
+    width: 1.3rem; height: 1.3rem;
+    line-height: 1.3rem;
+    text-align: center;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.65rem;
+    font-weight: 700;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  }
+
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.25rem 0;
+  }
+  @media (max-width: 640px) { .arch-grid { grid-template-columns: 1fr; } }
+  .arch-card {
+    border: 2px solid var(--rule);
+    border-radius: 10px;
+    padding: 1rem;
+  }
+  .arch-card h4 { margin: 0 0 0.5rem; font-size: 0.9rem; text-align: center; }
+  .arch-card .ops {
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.73rem;
+    line-height: 1.7;
+    text-align: center;
+  }
+
+  .quiz { margin: 2rem 0; }
+  .quiz-question {
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+  }
+  .quiz-question h4 { margin: 0 0 0.75rem; font-size: 1rem; }
+  .quiz-question details { margin-top: 0.75rem; }
+  .quiz-question summary {
+    cursor: pointer;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.85rem;
+    color: var(--accent);
+    font-weight: 500;
+    user-select: none;
+  }
+  .quiz-question .answer {
+    margin-top: 0.6rem;
+    padding: 0.75rem 1rem;
+    background: var(--callout-bg);
+    border-radius: 6px;
+    font-size: 0.88rem;
+  }
+
+  /* --- Experiment cards (shared with Lesson 6) --- */
+  .experiment {
+    margin: 1.5rem 0;
+    border: 2px solid var(--rule);
+    border-radius: 10px;
+    padding: 1.25rem;
+    background: var(--code-bg);
+  }
+  .experiment h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .experiment .desc {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+  .exp-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .exp-controls {
+    flex: 0 0 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .exp-controls label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif;
+  }
+  .exp-controls input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .exp-controls button {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    background: var(--bg);
+    color: var(--accent);
+    cursor: pointer;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif;
+    transition: background 0.15s;
+  }
+  .exp-controls button:hover { background: var(--accent); color: #fff; }
+  .exp-controls button.primary { background: var(--accent); color: #fff; }
+  .exp-controls button.primary:hover { opacity: 0.85; }
+  .exp-canvas {
+    flex: 1 1 320px;
+    min-width: 280px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--bg);
+  }
+  .exp-stats {
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.8;
+    color: var(--muted);
+  }
+  .exp-stats span { color: var(--text); font-weight: 600; }
+  @media (max-width: 640px) {
+    .exp-row { flex-direction: column; }
+    .exp-controls { flex: 0 0 auto; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h1>🧱 第5课 · 为什么 Attention 做一次不够？—— Transformer Block 的完整结构</h1>
+
+<p style="font-size:1.05rem;color:var(--muted);">第 4 课讲完了 Attention。一个自然的问题是：做完一次 Attention，然后呢？本课回答这个问题，并补完 Transformer 中除了 Attention 之外的所有结构。</p>
+
+<div class="callout">
+  <strong>⚠️ 本课前提</strong>
+  需要知道 Attention 的输入和输出都是向量序列（第 4 课）。具体说：输入是 n 个 token 各自的一个向量（来自 Embedding），Attention 让它们互相「看」了一遍，输出 n 个融合了上下文信息的新向量。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>起点：做完一次 Attention 之后，得到了什么？</h2>
+
+<p>假设输入句子是「我 喜欢 猫」。经过第 4 课讲的 Attention 之后：</p>
+
+<ul>
+  <li>「我」的向量里融入了「喜欢」和「猫」的信息</li>
+  <li>「喜欢」的向量里融入了「我」（主语）和「猫」（宾语）的信息</li>
+  <li>「猫」的向量里融入了「我」和「喜欢」的信息</li>
+</ul>
+
+<p>三个词不再是孤立的——每个都携带了整句话的上下文。这已经比原始的 Embedding 向量有用得多了。</p>
+
+<p><strong>但一个问题出现了：这就够了吗？</strong></p>
+
+<p>「我喜欢猫」是一个极短的句子。真实文本中，一个段落可能有几百个 token，涉及多层嵌套的指代关系、长距离的语义依赖。只做一次 Attention，每个词只能捕获到和它<strong>直接相邻</strong>的信息——因为它的 Q 只和原始向量的 K 做了一次匹配。复杂的语义关系往往需要多次「传递」才能建立。</p>
+
+<p>更具体地说：在只有一层 Attention 的情况下，第 1 个词和第 100 个词建立联系的唯一途径是它们之间的点积得分足够高。但在复杂文本中，两个远距离相关的词往往需要中间词来「桥接」。每一层 Attention 可以让信息在相邻位置之间流动一次，多层堆叠之后，信息可以逐层传递到更远的位置。</p>
+
+<p><strong>所以，注意力（Attention）需要重复做。不止一次，而是很多次。</strong></p>
+
+<div class="callout">
+  <strong>⚠️ 一个容易误解的点：重复做 Attention 不是同一个操作机械地重复</strong><br>
+  如果你把同一个 Attention（参数相同、输入相同）重复算 12 次，结果不会变——就像把同一张纸复印 12 次还是同一张纸。<br><br>
+  实际情况是：<strong>每一层有自己独立的 Attention 参数</strong>。Block₁ 的 W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup> 和 Block₂ 的 W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup> 是两套完全不同的数字，各自在训练中学到了不同的匹配规则。<br><br>
+  而且<strong>每一层的输入也不同</strong>：Block₁ 的输入是原始 Embedding 向量；Block₁ 加工完后输出新的向量给 Block₂。Block₂ 拿到的输入已经是 Block₁ 处理过的、融合了第一轮上下文的表示。所以即使参数相同（实际上也不同），输入不同也决定了输出不同。<br><br>
+  概括：<strong>不是「同一个 Attention 做了 12 遍」，而是「12 个不同的 Attention 层串联，每一层在上层的基础上继续精炼」。</strong>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>什么是「Block」（块）？—— 神经网络的基本建筑单元</h2>
+
+<p>在深入 Transformer 的具体设计之前，先理解一个更基础的概念：<strong>在深度学习中，「Block」（块，有时也叫 Layer / 层）就是一个可复用的处理单元。</strong></p>
+
+<p>它的工作方式很简单：</p>
+
+<pre><code>输入向量 → [ Block ] → 输出向量</code></pre>
+
+<p>你设计好一个 Block 的内部结构，然后<strong>把它复制 N 份，首尾相连叠在一起</strong>：</p>
+
+<pre><code>输入 → [ Block₁ ] → [ Block₂ ] → [ Block₃ ] → …… → [ Blockₙ ] → 输出</code></pre>
+
+<p>几个关键点：</p>
+<ul>
+  <li>所有 Block 的<strong>结构相同</strong>（比如都是「先 Attention 再 FFN」），但<strong>参数独立</strong>（Block₁ 的权重矩阵和 Block₂ 的不是同一套数字，各自学习）</li>
+  <li>数据<strong>依次流过</strong>每一个 Block。Block₁ 的输出是 Block₂ 的输入，以此类推</li>
+  <li>叠得越多，模型能捕捉的模式就越复杂。浅层 Block 倾向学到局部、低级的模式（哪些词经常共现），深层 Block 倾向学到全局、高级的模式（段落主旨、逻辑关系）</li>
+</ul>
+
+<p><strong>Transformer Block</strong> 就是这个框架下的一个具体设计——每个 Block 内部包含 Attention 和一些配套组件。GPT-2 小型叠了 12 个，GPT-3 叠了 96 个。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>一个 Transformer Block（Transformer 块）需要完成哪些事？</h2>
+
+<p>设计一个 Block，本质上是在回答：<strong>「一轮完整的处理」应该包含哪些步骤？</strong></p>
+
+<p>拆开来看，有两个功能层面的需求，和两个工程层面的需求：</p>
+
+<table>
+  <tr><th>类型</th><th>需求</th><th>对应组件</th></tr>
+  <tr>
+    <td><strong>功能层面</strong></td>
+    <td>让不同位置的 token 交换信息</td>
+    <td>Multi-Head Attention（第 4 课）</td>
+  </tr>
+  <tr>
+    <td><strong>功能层面</strong></td>
+    <td>对每个 token 的信息做非线性加工</td>
+    <td>Feed-Forward Network（本课 §1）</td>
+  </tr>
+  <tr>
+    <td><strong>工程层面</strong></td>
+    <td>保证堆了很多层之后梯度不消失</td>
+    <td>残差连接（本课 §2）</td>
+  </tr>
+  <tr>
+    <td><strong>工程层面</strong></td>
+    <td>防止数值范围在多层之后漂移失控</td>
+    <td>Layer Normalization（本课 §3）</td>
+  </tr>
+</table>
+
+<p>接下来逐个解释后三个——它们分别解决什么问题，以及具体怎么做。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§1 Feed-Forward Network（FFN）—— 逐位置的非线性加工</h2>
+
+<h3>它解决什么问题</h3>
+
+<p>注意力（Attention）的输出是多个 Value 向量的<strong>加权平均</strong>。加权平均有一个本质局限：它只能产生输入向量的<strong>线性组合</strong>。</p>
+
+<p><strong>什么是线性？什么是非线性？</strong></p>
+
+<p>一个变换（变换 = 把输入数字经过某种规则变成输出数字）是<strong>线性</strong>的，意味着画在坐标系里是一条<strong>直线</strong>。线性变换只做三件事：拉伸、旋转、平移。</p>
+
+<pre><code>线性：  y = 2x + 3    → 画出来是直线
+         y = 0.5x      → 画出来是直线</code></pre>
+
+<p>线性变换有一个关键限制：如果一组数据在输入空间里排成一条直线，线性变换后它们<strong>还是一条直线</strong>。它只能改变直线的方向和位置，不能把直线「掰弯」。</p>
+
+<p><strong>非线性</strong>变换就是画出来不是直线的变换：</p>
+
+<pre><code>非线性：y = x²         → 画出来是抛物线（弯的）
+        y = max(0, x)  → 画出来在 x=0 处有一个折角
+        y = 1/(1+e⁻ˣ)  → 画出来是 S 形曲线</code></pre>
+
+<p>非线性变换可以<strong>改变数据的形状</strong>——直线进去，曲线出来。</p>
+
+<p><strong>这和 Attention 有什么关系？</strong></p>
+
+<p>Attention 做加权平均 → 线性操作。这意味着 Attention 的输出永远被限制在输入向量的线性组合范围内——它不能创造出<strong>性质完全不同的新表示</strong>。</p>
+
+<p>举例：假设 Attention 从上下文中聚合了「不」和「好看」两个词的向量。对它们做加权平均，得到的是「不」和「好看」的中间状态——它既有「不」的属性又有「好看」的属性，但它不是「丑」。要得到「不好看 ≈ 丑」这个语义，你需要一个非线性变换来把「不 + 好看」的组合<strong>映射到一个完全不同的方向</strong>。</p>
+
+<p>这就是 FFN（Feed-Forward Network，前馈网络）存在的理由：<strong>引入非线性，让模型能表示线性组合无法表达的关系</strong>。否定、条件、转折、类比——这些语言中的核心逻辑关系，都是非线性的。</p>
+
+<h3>具体结构</h3>
+
+<pre><code>FFN(x) = GELU( x · W₁ + b₁ ) · W₂ + b₂</code></pre>
+
+<p>其中：</p>
+<ul>
+  <li><strong>x</strong>：一个 token 的向量（768 维）</li>
+  <li><strong>W₁</strong>：第一层权重矩阵，形状为 768 × 3072（将输入升维到 4 倍）</li>
+  <li><strong>b₁</strong>：第一层的<strong>偏置（bias）</strong>，形状为 3072 维。作用：在 <code>x·W₁</code> 的拉伸/旋转之外提供一个「平移」。类比一次函数 <code>y = kx + b</code> 中的 b——没有它，输入为 0 时输出也必然是 0，变换被限制在穿过原点的直线上。有了 b₁，高维空间的变换才能自由平移</li>
+  <li><strong>GELU</strong>：激活函数，引入非线性。输入为负时输出接近 0，输入为正时接近恒等</li>
+  <li><strong>W₂</strong>：第二层权重矩阵，形状为 3072 × 768（降维回原始维度）</li>
+  <li><strong>b₂</strong>：第二层的偏置，形状为 768 维。让降维后的输出也有平移自由度，最终 <code>FFN(x)</code> 能到达原始向量空间的任意位置</li>
+</ul>
+
+<p>三步操作：<strong>升维（768→3072）→ 非线性激活 → 降维（3072→768）</strong>。</p>
+
+<h3>为什么要「升维再降维」？</h3>
+
+<p>中间的 3072 维给了模型一个更大的「临时计算空间」。在低维空间中线性不可分的数据，投影到高维后可能变得可分。激活函数在这个高维空间里制造非线性，然后把结果压回原始维度。这是一种用冗余换表达能力的设计。</p>
+
+<!-- ========== 实验 1：线性 vs 非线性变换 ========== -->
+<div class="experiment" id="exp1">
+  <h4>🧪 实验 1：线性变换 vs 非线性变换 —— 亲眼看到「掰弯」</h4>
+  <p class="desc">下面有一组排成网格的点。先点「线性变换」观察：点动了，但网格线依然是直的——只是拉伸旋转。再点「+ ReLU」观察：负半轴的点被压扁到 y=0，整个形状被「掰弯」了。这就是 Attention（线性）和 FFN（非线性）的本质区别。</p>
+  <div class="exp-row">
+    <div class="exp-controls">
+      <div style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+        <button class="primary" onclick="exp1Linear()">⟳ 线性变换</button>
+        <button onclick="exp1ReLU()">✂️ + ReLU</button>
+        <button onclick="exp1GELU()">～ + GELU</button>
+        <button onclick="exp1Reset()">↺ 重置</button>
+      </div>
+      <div class="exp-stats">
+        当前状态：<span id="exp1-state">原始网格</span>
+      </div>
+      <p style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;">提示：反复点「线性变换」— 网格永远保持「直线性」。点「+ ReLU」— 下方点被拍平。</p>
+    </div>
+    <canvas class="exp-canvas" id="exp1-canvas" width="400" height="320"></canvas>
+  </div>
+</div>
+
+<h3>两个关键性质</h3>
+<ul>
+  <li><strong>逐位置独立</strong>：FFN 对每个 token 分别计算，不同 token 之间不交换信息。交换信息是 Attention 的工作。FFN 只负责「拿到 Attention 聚合好的上下文之后，怎么加工这个 token 自己的表示」。</li>
+  <li><strong>参数共享</strong>：所有 token 位置使用同一套 W₁ 和 W₂。因为你希望对「第一个词」和「第五个词」施加同样类型的非线性变换规则。</li>
+</ul>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§2 残差连接（Residual Connection）—— 保证深层网络能训练</h2>
+
+<h3>它解决什么问题</h3>
+
+<p>现在我们知道了每个 Block 里要有 Attention 和 FFN 两个操作。一个直觉的做法是把它们串起来：</p>
+
+<pre><code>x → Attention(x) → FFN(Attention(x)) → 输出</code></pre>
+
+<p>这在层数少的时候没问题。但当堆到 12 层、96 层时，出现了一个严重的工程问题：<strong>反向传播时，梯度从最后一层传回第一层，每穿过一个操作就衰减一点。到了前面几层，梯度几乎为零——参数无法更新，模型学不动。</strong></p>
+
+<p>这叫<strong>梯度消失</strong>。根源在于梯度必须穿过每个 Block 内部的所有计算步骤（矩阵乘法、激活函数等），每一步都可能让梯度的模变小。</p>
+
+<h3>插曲：导数在训练中到底起什么作用？</h3>
+
+<p>要理解「梯度消失为什么是大问题」，得先理解导数在训练中的角色。</p>
+
+<p>训练模型的本质，可以类比为<strong>蒙着眼睛站在一座山上，要走到山谷的最低点</strong>。你可以做一件事：用脚感受脚下的坡度——往某个方向迈一步，感觉自己是往下走了还是往上走了。这个「坡度」就是<strong>导数</strong>。</p>
+
+<p>翻译成数学：模型有几十亿个参数（W₁, W₂, b₁, …），定义了一个<strong>损失函数 L</strong>（衡量模型当前表现有多差）。对某个参数求 L 的导数，就得到了它的<strong>梯度</strong>——含义是：其他参数都不动，单独把这个值调大一点点，损失会变大还是变小？</p>
+
+<ul>
+  <li><strong>导数 &gt; 0</strong>：调大它 → 损失变大（往山上走）→ 应该<strong>减小</strong>这个参数</li>
+  <li><strong>导数 &lt; 0</strong>：调大它 → 损失变小（往山下走）→ 应该<strong>增大</strong>这个参数</li>
+</ul>
+
+<p>每次把每个参数往导数的<strong>反方向</strong>挪一小步：</p>
+
+<pre><code>新参数 = 旧参数 - 学习率 × 导数</code></pre>
+
+<p>对几十亿个参数都这样做一次，就是一步训练。反复几百万步，参数逐渐滑到损失最低的地方。这就是<strong>梯度下降</strong>。</p>
+
+<p><strong>关键结论：梯度是指路的工具。没有梯度，参数就不知道往哪个方向调。</strong></p>
+
+<h3>那为什么层数多了，梯度就会衰减？</h3>
+
+<p>求第 1 层参数的梯度时，需要<strong>链式法则</strong>把最后一层的误差逐层传回第一层：</p>
+
+<pre><code>∂L/∂W₁ = ∂L/∂yₙ × ∂yₙ/∂yₙ₋₁ × … × ∂y₂/∂y₁ × ∂y₁/∂W₁</code></pre>
+
+<p>这是 N 个局部导数的<strong>连乘</strong>。</p>
+
+<p>现在看每个局部导数的值。它们来自两类计算：</p>
+
+<ul>
+  <li><strong>激活函数（GELU、Sigmoid 等）</strong>的导数 ≤ 1，且输入偏离中心时趋近于 0。比如 Sigmoid 的导数最大只有 0.25；GELU 在负半轴导数也远小于 1</li>
+  <li><strong>矩阵乘法的导数</strong>——权重初始化被控制在接近 1 的范围，不会系统性放大。实践中绝大多数局部导数的绝对值 ≤ 1</li>
+</ul>
+
+<p>于是：<strong>一大堆 ≤ 1 的数连乘，乘得越多，结果越接近 0。</strong>这不是「深了就会自动消失」，而是<strong>指数衰减</strong>的数学必然：</p>
+
+<pre><code>每个因子平均 0.5，12 层 → 0.5¹² ≈ 0.00024
+每个因子平均 0.5，96 层 → 0.5⁹⁶ ≈ 10⁻²⁹（基本是 0）
+每个因子平均 0.9，96 层 → 0.9⁹⁶ ≈ 0.00004</code></pre>
+
+<p>结果：前面几层的梯度几乎为零 → 参数收不到有效的调整信号 → 前面的层卡住不动，模型实际上只有最后几层在学。</p>
+
+<!-- ========== 实验 2：梯度衰减模拟器 ========== -->
+<div class="experiment" id="exp2">
+  <h4>🧪 实验 2：梯度衰减模拟器 —— 亲手感受链式法则的威力</h4>
+  <p class="desc">模拟梯度从最后一层（右侧）传回第一层（左侧）的过程。每个柱子代表一层的梯度大小。调整层数和衰减因子，观察前面几层的梯度是如何指数级缩水到几乎为零的。然后勾选「残差连接」，看那个 +1 怎么拯救一切。</p>
+  <div class="exp-row">
+    <div class="exp-controls">
+      <label>层数：<span id="exp2-layers-display">12</span></label>
+      <input type="range" id="exp2-layers" min="4" max="60" step="1" value="12">
+      <label>每层衰减因子：<span id="exp2-decay-display">0.70</span></label>
+      <input type="range" id="exp2-decay" min="0.3" max="0.95" step="0.01" value="0.70">
+      <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+        <input type="checkbox" id="exp2-residual" style="accent-color:var(--accent);">
+        <strong>残差连接</strong>（+1 直通路径）
+      </label>
+      <div class="exp-stats">
+        第 1 层梯度：<span id="exp2-grad1" style="font-size:1rem;">0.00024</span><br>
+        衰减倍数：<span id="exp2-ratio">~4100×</span>
+      </div>
+      <p style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;">试试 96 层 + 衰减 0.9：梯度降到 10⁻⁴。再勾选残差。</p>
+    </div>
+    <canvas class="exp-canvas" id="exp2-canvas" width="420" height="300"></canvas>
+  </div>
+</div>
+
+<h3>重要澄清：梯度接近 0 ≠ 训练好了</h3>
+
+<p>这可能是最容易误解的地方。高中数学里「令导数 = 0，解出极值点」是对的——但那是假设函数是一个光滑的碗（凸函数）。</p>
+
+<p>神经网络的损失函数不是一只碗，而是一片有无数山峰、高原、峡谷的巨大山脉。同一个「梯度接近 0」，可能对应两种完全不同的情况：</p>
+
+<table>
+  <tr><th></th><th>真的收敛了 ✅</th><th>梯度消失了 ❌</th></tr>
+  <tr><td><strong>损失值</strong></td><td>已经很低，不再下降</td><td>还很高，但降不动了</td></tr>
+  <tr><td><strong>梯度</strong></td><td>所有层都接近 0</td><td>前面层接近 0，后面层还有信号</td></tr>
+  <tr><td><strong>原因</strong></td><td>真的到了山谷底部</td><td>信号在路上衰减完了，传不到前面</td></tr>
+  <tr><td><strong>参数状态</strong></td><td>稳定，微调即可</td><td>前面层卡住，根本没学好</td></tr>
+</table>
+
+<p><strong>实际训练中，判断标准不是梯度的大小，而是损失值（Loss）是否还在下降。</strong>训练时观察验证集上的损失曲线——损失连续很多步不再下降就停（这叫 early stopping，早停法）。没人盯着梯度的绝对值说「降到 0.0001 了，训练完成」。<strong>损失值是终极裁判，梯度只是指路的向导。</strong>关于损失函数的具体计算，将在第 6 课详述。</p>
+
+<h3>解决方案：加一条「快捷通道」</h3>
+
+<p>残差连接的公式：</p>
+
+<pre><code>output = x + Sublayer(x)</code></pre>
+
+<p>其中 Sublayer(x) 是 Attention 或 FFN 的输出。关键在于 <strong>+ x</strong> 这一项——原始输入 x 被原封不动地加到子层的输出上。</p>
+
+<p>这在反向传播时意味着什么？梯度计算时，对 x 求导：</p>
+
+<pre><code>∂(output)/∂x = 1 + ∂(Sublayer(x))/∂x</code></pre>
+
+<p>那个 <strong>1</strong> 是关键的——它保证了即使 Sublayer 内部的梯度 ∂(Sublayer)/∂x 衰减到接近零，<strong>至少有 1 的梯度能直接传回前面的层</strong>。这条不经过任何变换的直通路径，解决了梯度消失问题。</p>
+
+<p>从另一个角度看：有残差连接时，Sublayer 不需要从零开始学习完整的变换。它只需要学<strong>「当前输入离理想输出还差多少」</strong>——即残差（residual）。如果 Sublayer 什么都没学到（输出全零），output = x + 0 = x，至少不会比原来更差。这让深层网络的训练下限被保证在「至少等于浅层网络」。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§3 Layer Normalization（层归一化）—— 防止数值失控</h2>
+
+<h3>它解决什么问题</h3>
+
+<p>数据每穿过一个子层（Attention 或 FFN），向量里各个维度的数值范围就可能发生漂移。经过多次矩阵乘法和非线性激活后，某些维度的值可能变得极大（几十上百），另一些变得极小（接近零）。如果不加控制，几层之后：</p>
+<ul>
+  <li>激活函数饱和：GELU 接收极端输入时，输出几乎恒等于 0 或恒等于输入本身，失去了非线性能力</li>
+  <li>梯度消失或爆炸：极端数值导致反向传播时的梯度也极端</li>
+</ul>
+
+<p>LayerNorm 在<strong>每次子层计算之前</strong>，把输入强行拉回标准范围。</p>
+
+<!-- ========== 实验 3：数值漂移可视化 ========== -->
+<div class="experiment" id="exp3">
+  <h4>🧪 实验 3：数值漂移模拟器 —— 为什么需要「拉回来」</h4>
+  <p class="desc">模拟一个 20 维向量（柱状图，每根柱子是一个维度的值）连续穿过多个层的效果。每点一次「穿过一层」，数值就会漂移——有些维度暴涨，有些趋近于零。勾选 LayerNorm 后，每层都会把数值重新拉回均值为 0、方差为 1 的范围。</p>
+  <div class="exp-row">
+    <div class="exp-controls">
+      <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+        <input type="checkbox" id="exp3-ln" checked style="accent-color:var(--accent);">
+        <strong>使用 LayerNorm</strong>
+      </label>
+      <div style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+        <button class="primary" onclick="exp3Pass()">→ 穿过一层</button>
+        <button onclick="exp3Pass5()">× 5 层</button>
+        <button onclick="exp3Reset()">↺ 重置</button>
+      </div>
+      <div class="exp-stats">
+        已过层数：<span id="exp3-layers">0</span><br>
+        均值：<span id="exp3-mean">0.00</span><br>
+        标准差：<span id="exp3-std">1.00</span><br>
+        最大值：<span id="exp3-max">2.31</span>
+      </div>
+      <p style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;">取消勾选 LayerNorm，再点几次「穿过一层」——数值迅速失控。</p>
+    </div>
+    <canvas class="exp-canvas" id="exp3-canvas" width="420" height="280"></canvas>
+  </div>
+</div>
+
+<h3>具体做法</h3>
+
+<p>对于一个 token 的 768 维向量，LayerNorm 做三步：</p>
+
+<div class="ln-steps">
+  <div class="ln-step">
+    <strong>计算均值和方差</strong>：求这 768 个数值的平均值 μ 和方差 σ²
+  </div>
+  <div class="ln-step">
+    <strong>标准化</strong>：每个值减去 μ，除以 √(σ² + ε)，得到均值为 0、方差为 1 的向量
+  </div>
+  <div class="ln-step">
+    <strong>缩放和平移</strong>：乘以 γ（可学习的缩放参数，768 维），加上 β（可学习的平移参数，768 维）。这一步让模型有能力把归一化后的分布调整到最有利于当前层的范围。
+  </div>
+</div>
+
+<pre><code>LayerNorm(x) = γ · (x - μ) / √(σ² + ε) + β</code></pre>
+
+<p>为什么 NLP（自然语言处理）用 LayerNorm 而不是更常见的 BatchNorm（批归一化）？因为文本序列长度不一致，同一个 batch（批次）里不同样本的 padding（填充）长度不同，跨 batch 做统计（BatchNorm 的方式）没有意义。LayerNorm 对每个 token 独立计算自己的 μ 和 σ，不受序列长度和 padding 的影响。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>组装：一个完整的 Transformer Block</h2>
+
+<p>现在把四个组件拼在一起。一个 Block 包含<strong>两个子层</strong>，每个子层配一个残差连接。LayerNorm 放在每个子层<strong>前面</strong>（这是现代做法，称为 Pre-LN）：</p>
+
+<div class="block-diagram">
+  <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem;">输入 x</div>
+  <div class="block-row">
+    <span class="block-arrow">→</span>
+    <div class="block-box norm">LayerNorm</div>
+    <span class="block-arrow">→</span>
+    <div class="block-box attn">Multi-Head<br>Attention</div>
+    <span class="block-arrow">→</span>
+    <div class="block-plus">+</div>
+  </div>
+  <div class="block-row" style="font-size:0.7rem;color:var(--muted);">
+    <span style="width:80px;"></span>←── x 跳过 Attention 直接过来 ──
+  </div>
+  <div class="block-row" style="margin-top:0.5rem;">
+    <span class="block-arrow">→</span>
+    <div class="block-box norm">LayerNorm</div>
+    <span class="block-arrow">→</span>
+    <div class="block-box ffn">Feed-Forward<br>Network</div>
+    <span class="block-arrow">→</span>
+    <div class="block-plus">+</div>
+    <span class="block-arrow">→</span>
+    <span style="font-size:0.8rem;">输出</span>
+  </div>
+  <div class="block-row" style="font-size:0.7rem;color:var(--muted);">
+    <span style="width:80px;"></span>←── x 跳过 FFN 直接过来 ──
+  </div>
+</div>
+
+<p>写成伪代码：</p>
+<pre><code>def transformer_block(x):
+    # 子层 1：Attention
+    x = x + attention(layer_norm(x))
+    # 子层 2：FFN
+    x = x + ffn(layer_norm(x))
+    return x</code></pre>
+
+<h3>LayerNorm 放前面还是后面？</h3>
+
+<div class="arch-grid">
+  <div class="arch-card">
+    <h4>Post-LN（后置层归一化，原始论文，2017）</h4>
+    <div class="ops">
+      x → Attention → + x → LN → FFN → + x → LN
+    </div>
+    <p style="font-size:0.73rem;color:var(--muted);margin-top:0.3rem;">LN 在子层后面。<br>层数深时训练不稳定，需要学习率 warmup。</p>
+  </div>
+  <div class="arch-card">
+    <h4>Pre-LN（前置层归一化，现代做法，GPT-2 起）</h4>
+    <div class="ops">
+      x → LN → Attention → + x → LN → FFN → + x
+    </div>
+    <p style="font-size:0.73rem;color:var(--muted);margin-top:0.3rem;">✅ LN 在子层前面。<br>训练更稳定，现代 LLM 的标配。</p>
+  </div>
+</div>
+
+<p>Pre-LN 更好的原因涉及反向传播路径的具体分析，简单说：LN 在子层前面时，梯度回传时不需要穿过 LN 的计算，路径更短，训练更稳定。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>叠起来：12 个 Block 串联</h2>
+
+<p>一个 Block 做完一轮「交换信息 → 逐位置加工」。但一轮不够。把 12 个 Block 首尾相连：</p>
+
+<pre><code>Embedding 输出
+    ↓
+[ Block₁ ]  →  第一轮：局部词汇关联
+[ Block₂ ]  →  第二轮：短语级别的模式
+[ Block₃ ]
+   ……
+[ Block₁₂ ] →  最后一轮：全局语义、长距离依赖
+    ↓
+最终输出 → 用于预测下一个 token</code></pre>
+
+<p>每个 Block 有自己的参数（W^Q, W^K, W^V, W^O 用于 Attention；W₁, W₂, b₁, b₂ 用于 FFN；γ, β 用于 LayerNorm）。12 个 Block 互不共享参数。数据从头流到尾，每经过一层就被精炼一次。</p>
+
+<p>最后一层的输出向量，经过一个线性变换 + Softmax，就变成了「下一个 token 在整个词表上的概率分布」。</p>
+
+<div class="callout">
+  <strong>总结：为什么 Attention 做一次不够</strong><br>
+  单次 Attention 只能让信息在直接相关的 token 之间流动一次。多层堆叠之后，一个 token 的信息可以逐层扩散到更远的位置——第一层传给邻居，第二层传给邻居的邻居，以此类推。同时，每层的 FFN 在 Attention 聚合的上下文基础上做非线性变换，逐步提取更抽象的模式。<br><br>
+  这就是 Transformer Block 存在的根本原因：<strong>一轮 Attention + FFN 不够，需要反复做。</strong>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 小测验</h2>
+
+<div class="quiz">
+
+<div class="quiz-question">
+  <h4>问题 1/3 — Block 的概念</h4>
+  <p>12 个 Transformer Block 之间共享参数吗？为什么？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>不共享。每个 Block 有自己独立的参数。</strong><br>
+      如果共享参数，12 个 Block 就退化成了同一个 Block 重复计算 12 次——不会增加模型的表达能力。独立参数让每一层可以学到不同抽象级别的模式：浅层学词汇关联，深层学语义逻辑。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 2/3 — 残差连接</h4>
+  <p>如果把残差连接去掉（output = Sublayer(x) 而不是 x + Sublayer(x)），堆 96 层 Transformer 会发生什么？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>训练不动——前面几层的梯度接近于零，参数无法更新。</strong><br>
+      没有残差连接时，梯度必须穿过每一层内部的所有矩阵乘法和激活函数才能到达前面的层。96 层下来，梯度呈指数级衰减，前面层的参数几乎得不到更新信号。残差连接的「+ x」提供了梯度绕过子层的直通路径。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 3/3 — Attention 和 FFN 的分工</h4>
+  <p>既然 Attention 已经聚合了上下文信息，为什么还需要 FFN？FFN 做的是 Attention 做不到的什么事？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>Attention 只能做线性组合（加权平均），FFN 引入了非线性变换。</strong><br>
+      Attention 的输出是多个 Value 向量的加权和——本质上是线性操作。语言中大量关系是非线性的（否定、条件、类比等），线性组合无法表示。FFN 通过 GELU 激活函数引入非线性，让模型有能力学习这些复杂映射。分工上，Attention 负责「谁和谁相关」，FFN 负责「这个 token 的表示怎么变换」。
+    </div>
+  </details>
+</div>
+
+</div>
+
+<hr>
+
+<h2>📺 推荐观看</h2>
+
+<ul>
+  <li><strong><a href="https://www.bilibili.com/video/BV1TZ421v7Fp">B站 · 3Blue1Brown 深度学习中的残差连接与归一化</a></strong> — 可视化理解残差连接为什么能解决梯度消失。</li>
+  <li><strong><a href="https://www.bilibili.com/video/BV1dt4y1J7KL">B站 · Transformer 论文逐段精读（后半部分）</a></strong> — 原论文中 FFN、残差、LayerNorm 的具体配置和消融实验。</li>
+</ul>
+
+<hr>
+
+<nav class="lesson-nav">
+  <a href="0004-attention.html">← 上一课：注意力机制</a>
+  <a href="0006-training-loop.html">下一课：训练循环 —— 模型怎么学？→</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>🤖 本课补完了 Transformer 的结构拼图。从第 2 课的原始文本开始，一串数据经过了「分词 → Token ID → Embedding → 12 层 Transformer Block（每层 = Attention + FFN + 残差 + LN）→ 输出预测」。现在你知道了模型「怎么算」。下一课讲模型「怎么学」——损失函数和反向传播。有问题随时问 Bib。</p>
+</footer>
+
+<!-- ============================================================ -->
+<!-- EXPERIMENT SCRIPTS -->
+<!-- ============================================================ -->
+<script>
+// ========== Experiment 1: Linear vs Nonlinear Transform ==========
+(function() {
+  const canvas = document.getElementById('exp1-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  // Create grid points: 6x6 grid in range [-3,3] × [-3,3]
+  const originalPoints = [];
+  for (let i = 0; i < 7; i++) {
+    for (let j = 0; j < 7; j++) {
+      originalPoints.push({ x: -3 + i, y: -3 + j });
+    }
+  }
+
+  let currentPoints = originalPoints.map(p => ({x: p.x, y: p.y}));
+  let stateText = '原始网格';
+
+  // A 2x2 matrix that does noticeable rotation+stretch
+  const M = [[1.4, 0.6], [-0.4, 1.1]];
+
+  function applyLinear(pts) {
+    return pts.map(p => ({
+      x: M[0][0] * p.x + M[0][1] * p.y,
+      y: M[1][0] * p.x + M[1][1] * p.y
+    }));
+  }
+
+  function applyReLU(pts) {
+    return pts.map(p => ({
+      x: Math.max(0, p.x),
+      y: Math.max(0, p.y)
+    }));
+  }
+
+  function applyGELU(pts) {
+    // GELU approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+    function gelu(x) {
+      const c = Math.sqrt(2 / Math.PI);
+      return 0.5 * x * (1 + Math.tanh(c * (x + 0.044715 * x * x * x)));
+    }
+    return pts.map(p => ({ x: gelu(p.x), y: gelu(p.y) }));
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Coordinate mapping: data range ~[-5, 6], map to canvas
+    const xMin = -5, xMax = 6, yMin = -5, yMax = 6;
+    function xToPx(x) { return 30 + ((x - xMin) / (xMax - xMin)) * (W - 60); }
+    function yToPy(y) { return H - 30 - ((y - yMin) / (yMax - yMin)) * (H - 60); }
+
+    // Draw axes
+    ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xToPx(xMin), yToPy(0)); ctx.lineTo(xToPx(xMax), yToPy(0));
+    ctx.moveTo(xToPx(0), yToPy(yMin)); ctx.lineTo(xToPx(0), yToPy(yMax));
+    ctx.stroke();
+
+    // Draw original grid reference (faint)
+    ctx.fillStyle = '#ddd';
+    for (const p of originalPoints) {
+      ctx.beginPath();
+      ctx.arc(xToPx(p.x), yToPy(p.y), 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Faint grid lines for original
+    ctx.strokeStyle = '#eee'; ctx.lineWidth = 0.5;
+    for (let i = 0; i < 7; i++) {
+      // Vertical lines (same x)
+      const ptsV = originalPoints.slice(i * 7, (i + 1) * 7);
+      ctx.beginPath();
+      ctx.moveTo(xToPx(ptsV[0].x), yToPy(ptsV[0].y));
+      for (let j = 1; j < ptsV.length; j++) ctx.lineTo(xToPx(ptsV[j].x), yToPy(ptsV[j].y));
+      ctx.stroke();
+      // Horizontal lines (same y)
+      ctx.beginPath();
+      ctx.moveTo(xToPx(originalPoints[i].x), yToPy(originalPoints[i].y));
+      for (let j = 1; j < 7; j++) {
+        const p = originalPoints[i + j * 7];
+        ctx.lineTo(xToPx(p.x), yToPy(p.y));
+      }
+      ctx.stroke();
+    }
+
+    // Draw transformed points
+    ctx.fillStyle = '#c44';
+    for (const p of currentPoints) {
+      ctx.beginPath();
+      ctx.arc(xToPx(p.x), yToPy(p.y), 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Grid lines for transformed
+    ctx.strokeStyle = '#e88'; ctx.lineWidth = 1;
+    for (let i = 0; i < 7; i++) {
+      const ptsV = currentPoints.slice(i * 7, (i + 1) * 7);
+      ctx.beginPath();
+      ctx.moveTo(xToPx(ptsV[0].x), yToPy(ptsV[0].y));
+      for (let j = 1; j < ptsV.length; j++) ctx.lineTo(xToPx(ptsV[j].x), yToPy(ptsV[j].y));
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(xToPx(currentPoints[i].x), yToPy(currentPoints[i].y));
+      for (let j = 1; j < 7; j++) {
+        const p = currentPoints[i + j * 7];
+        ctx.lineTo(xToPx(p.x), yToPy(p.y));
+      }
+      ctx.stroke();
+    }
+
+    // Legend
+    ctx.fillStyle = '#888'; ctx.font = '11px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('● 变换后   ○ 原始', 10, 16);
+  }
+
+  function updateState(text) {
+    stateText = text;
+    document.getElementById('exp1-state').textContent = text;
+    draw();
+  }
+
+  window.exp1Linear = function() {
+    currentPoints = applyLinear(currentPoints);
+    updateState('线性变换后（网格线仍然直）');
+  };
+  window.exp1ReLU = function() {
+    currentPoints = applyLinear(currentPoints);
+    currentPoints = applyReLU(currentPoints);
+    updateState('线性 + ReLU（下方被拍平）');
+  };
+  window.exp1GELU = function() {
+    currentPoints = applyLinear(currentPoints);
+    currentPoints = applyGELU(currentPoints);
+    updateState('线性 + GELU（平滑弯曲）');
+  };
+  window.exp1Reset = function() {
+    currentPoints = originalPoints.map(p => ({x: p.x, y: p.y}));
+    updateState('原始网格');
+  };
+
+  draw();
+})();
+
+// ========== Experiment 2: Gradient Decay Simulator ==========
+(function() {
+  const canvas = document.getElementById('exp2-canvas');
+  const ctx = canvas.getContext('2d');
+
+  function getParams() {
+    const layers = parseInt(document.getElementById('exp2-layers').value);
+    const decay = parseFloat(document.getElementById('exp2-decay').value);
+    const useResidual = document.getElementById('exp2-residual').checked;
+    return { layers, decay, useResidual };
+  }
+
+  function computeGradients(layers, decay, useResidual) {
+    const grads = [];
+    let grad = 1.0; // gradient at the last layer
+    for (let i = layers - 1; i >= 0; i--) {
+      if (useResidual) {
+        // With residual: grad = 1 + decay * previous_grad
+        // Actually more precisely: each layer gradient = incoming * (1 + decay)
+        // Simplified model: gradient passes through with minimum 1
+        grad = 1 + decay * grad;
+        // But cap and normalize for display
+      } else {
+        grad = grad * decay;
+      }
+      grads.unshift(grad); // prepend so index 0 = layer 1
+    }
+    return grads;
+  }
+
+  function draw() {
+    const { layers, decay, useResidual } = getParams();
+    const grads = computeGradients(layers, decay, useResidual);
+    const Wc = canvas.width, Hc = canvas.height;
+    const pad = { top: 15, right: 40, bottom: 30, left: 45 };
+    const pw = Wc - pad.left - pad.right;
+    const ph = Hc - pad.top - pad.bottom;
+
+    ctx.clearRect(0, 0, Wc, Hc);
+
+    // Find max gradient for scaling
+    const maxGrad = Math.max(...grads, 1.0);
+    const barHeight = Math.max(2, Math.min(20, ph / layers - 2));
+
+    // Draw bars
+    for (let i = 0; i < layers; i++) {
+      const g = grads[i];
+      const barW = Math.max(2, (g / maxGrad) * pw);
+      const y = pad.top + (i / layers) * ph;
+      const h = Math.min(barHeight - 1, ph / layers - 2);
+
+      // Color: green for healthy gradient (> 0.1), yellow (> 0.01), red (<= 0.01)
+      let color;
+      if (g > 0.1) color = '#4a9';
+      else if (g > 0.01) color = '#da5';
+      else color = '#c44';
+
+      ctx.fillStyle = color;
+      ctx.fillRect(pad.left, y, barW, h);
+
+      // Label every ~20% of layers
+      if (i % Math.ceil(layers / 6) === 0 || i === layers - 1 || i === 0) {
+        ctx.fillStyle = '#888';
+        ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText('L' + (i + 1), pad.left - 4, y + h / 2 + 3);
+      }
+    }
+
+    // Threshold line at 0.01
+    const threshX = pad.left + (0.01 / maxGrad) * pw;
+    if (0.01 < maxGrad) {
+      ctx.strokeStyle = '#e88'; ctx.lineWidth = 1;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(threshX, pad.top);
+      ctx.lineTo(threshX, pad.top + ph);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#e88'; ctx.font = '10px "Source Sans 3", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('← 0.01 阈值', threshX + 3, pad.top + 12);
+    }
+
+    // Axes
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, pad.top);
+    ctx.lineTo(pad.left, pad.top + ph);
+    ctx.lineTo(pad.left + pw, pad.top + ph);
+    ctx.stroke();
+    ctx.fillStyle = '#888'; ctx.font = '10px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('梯度大小 →', Wc / 2, Hc - 4);
+    ctx.fillText('层', 10, Hc / 2);
+
+    // Update stats
+    const grad1 = grads[0];
+    document.getElementById('exp2-grad1').textContent = grad1 < 0.0001 ? grad1.toExponential(2) : grad1.toFixed(5);
+    const ratio = 1.0 / Math.max(grad1, 1e-30);
+    document.getElementById('exp2-ratio').textContent = ratio > 10000 ? '~' + ratio.toExponential(0) + '×' : '~' + Math.round(ratio) + '×';
+
+    // Update displays
+    document.getElementById('exp2-layers-display').textContent = layers;
+    document.getElementById('exp2-decay-display').textContent = decay.toFixed(2);
+  }
+
+  document.getElementById('exp2-layers').addEventListener('input', draw);
+  document.getElementById('exp2-decay').addEventListener('input', draw);
+  document.getElementById('exp2-residual').addEventListener('change', draw);
+
+  draw();
+})();
+
+// ========== Experiment 3: Numerical Drift & LayerNorm ==========
+(function() {
+  const canvas = document.getElementById('exp3-canvas');
+  const ctx = canvas.getContext('2d');
+  const D = 20; // 20 dimensions for visual clarity
+  let values = [];
+  let layerCount = 0;
+
+  function reset() {
+    // Initialize with standard normal distribution
+    values = [];
+    for (let i = 0; i < D; i++) {
+      // Box-Muller for normal distribution
+      const u1 = Math.random() || 0.001;
+      const u2 = Math.random() || 0.001;
+      values.push(Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2));
+    }
+    layerCount = 0;
+  }
+
+  function layerNorm(vals) {
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const variance = vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length;
+    const std = Math.sqrt(variance) + 1e-5;
+    // Standardize then apply learnable gamma/beta (simplified: gamma=1, beta=0)
+    return vals.map(v => (v - mean) / std);
+  }
+
+  function passLayer(vals) {
+    // Simulate passing through a linear layer: multiply by random-ish weights + small bias
+    const newVals = [];
+    for (let i = 0; i < vals.length; i++) {
+      // Mix values from all dimensions with random weights
+      let sum = 0;
+      for (let j = 0; j < vals.length; j++) {
+        // Deterministic "random" weights based on (i,j) for reproducibility
+        const w = Math.sin(i * 3.7 + j * 7.1 + layerCount * 0.5) * 0.8;
+        sum += w * vals[j];
+      }
+      const bias = Math.cos(i * 2.3 + layerCount) * 0.3;
+      newVals.push(sum * 0.6 + bias);
+    }
+    return newVals;
+  }
+
+  function pass() {
+    const useLN = document.getElementById('exp3-ln').checked;
+    if (useLN) {
+      values = layerNorm(values);
+    }
+    values = passLayer(values);
+    layerCount++;
+    draw();
+    updateStats();
+  }
+
+  function updateStats() {
+    const mean = values.reduce((a,b) => a+b, 0) / values.length;
+    const variance = values.reduce((a,b) => a + (b-mean)*(b-mean), 0) / values.length;
+    const std = Math.sqrt(variance);
+    const max = Math.max(...values.map(Math.abs));
+
+    document.getElementById('exp3-layers').textContent = layerCount;
+    document.getElementById('exp3-mean').textContent = mean.toFixed(2);
+    document.getElementById('exp3-std').textContent = std.toFixed(2);
+    document.getElementById('exp3-max').textContent = max.toFixed(2);
+  }
+
+  function draw() {
+    const Wc = canvas.width, Hc = canvas.height;
+    const pad = { top: 15, right: 20, bottom: 35, left: 45 };
+    const pw = Wc - pad.left - pad.right;
+    const ph = Hc - pad.top - pad.bottom;
+    const barW = Math.max(6, (pw / D) - 3);
+    const gap = (pw - barW * D) / (D + 1);
+
+    ctx.clearRect(0, 0, Wc, Hc);
+
+    // Find range for y-axis (symmetric)
+    const maxAbs = Math.max(4, Math.max(...values.map(Math.abs)) * 1.2);
+
+    // Zero line
+    const zeroY = pad.top + ph / 2;
+    ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, zeroY);
+    ctx.lineTo(pad.left + pw, zeroY);
+    ctx.stroke();
+
+    // Bars
+    for (let i = 0; i < D; i++) {
+      const val = values[i];
+      const x = pad.left + gap + i * (barW + gap);
+      const barH = (Math.abs(val) / maxAbs) * (ph / 2);
+      const y = val >= 0 ? zeroY - barH : zeroY;
+      const h = Math.max(1, barH);
+
+      // Color based on magnitude
+      const intensity = Math.min(1, Math.abs(val) / 5);
+      let r, g, b;
+      if (val >= 0) {
+        r = Math.floor(200 * intensity); g = Math.floor(100 * (1 - intensity)); b = 80;
+      } else {
+        r = 80; g = Math.floor(100 * (1 - intensity)); b = Math.floor(200 * intensity);
+      }
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x, y, barW, h);
+
+      // Dimension label every 5
+      if (i % 5 === 0) {
+        ctx.fillStyle = '#888'; ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(i + 1, x + barW / 2, pad.top + ph + 14);
+      }
+    }
+
+    // ±1σ and ±2σ lines
+    const useLN = document.getElementById('exp3-ln').checked;
+    if (useLN) {
+      const std = Math.sqrt(values.reduce((a,b) => a + (b - values.reduce((s,v) => s+v,0)/values.length)**2, 0) / values.length);
+      [-2, -1, 1, 2].forEach(s => {
+        const y = zeroY - (s * (ph / 2)) / maxAbs;
+        if (y > pad.top && y < pad.top + ph) {
+          ctx.strokeStyle = '#aaa'; ctx.lineWidth = 0.5;
+          ctx.setLineDash([2, 4]);
+          ctx.beginPath();
+          ctx.moveTo(pad.left, y);
+          ctx.lineTo(pad.left + pw, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
+    }
+
+    // Axes
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, pad.top);
+    ctx.lineTo(pad.left, pad.top + ph);
+    ctx.lineTo(pad.left + pw, pad.top + ph);
+    ctx.stroke();
+    ctx.fillStyle = '#888'; ctx.font = '10px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('维度 →', Wc / 2, Hc - 2);
+  }
+
+  window.exp3Pass = function() { pass(); };
+  window.exp3Pass5 = function() { for (let i = 0; i < 5; i++) pass(); };
+  window.exp3Reset = function() { reset(); draw(); updateStats(); };
+
+  document.getElementById('exp3-ln').addEventListener('change', function() {
+    draw();
+    updateStats();
+  });
+
+  reset();
+  draw();
+  updateStats();
+})();
+</script>
+
+</body>
+</html>

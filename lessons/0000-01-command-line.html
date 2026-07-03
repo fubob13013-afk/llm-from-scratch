@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第0.1课 · 命令行入门 — 终端是什么？</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  /* Terminal simulator */
+  .terminal-sim {
+    margin: 1.25rem 0;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 2px solid #333;
+    background: #1a1a1a;
+  }
+  .terminal-sim .titlebar {
+    background: #333;
+    padding: 0.4rem 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .terminal-sim .titlebar .dot {
+    width: 11px; height: 11px;
+    border-radius: 50%;
+  }
+  .terminal-sim .titlebar .dot.r { background: #ff5f56; }
+  .terminal-sim .titlebar .dot.y { background: #ffbd2e; }
+  .terminal-sim .titlebar .dot.g { background: #27c93f; }
+  .terminal-sim .titlebar .tname {
+    color: #aaa;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif;
+  }
+  .terminal-sim .screen {
+    padding: 0.75rem 1rem;
+    min-height: 280px;
+    max-height: 420px;
+    overflow-y: auto;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: #c0c0c0;
+    cursor: text;
+  }
+  .terminal-sim .screen .line {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .terminal-sim .screen .line.cmd { color: #5af; }
+  .terminal-sim .screen .line.out { color: #c0c0c0; }
+  .terminal-sim .screen .line.err { color: #f66; }
+  .terminal-sim .screen .line.hint { color: #888; font-style: italic; }
+  .terminal-sim .screen .input-line {
+    display: flex;
+    align-items: center;
+  }
+  .terminal-sim .screen .prompt {
+    color: #5f5;
+    margin-right: 0.4rem;
+    white-space: nowrap;
+  }
+  .terminal-sim .screen input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-family: inherit;
+    font-size: inherit;
+    outline: none;
+    caret-color: #5f5;
+  }
+
+  /* Quiz */
+  .quiz { margin: 2rem 0; }
+  .quiz-question { margin: 1.5rem 0; padding: 1rem 1.25rem; border: 1px solid var(--rule); border-radius: 8px; }
+  .quiz-question h4 { margin: 0 0 0.75rem; font-size: 1rem; }
+  .quiz-question details { margin-top: 0.75rem; }
+  .quiz-question summary { cursor: pointer; font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif; font-size: 0.85rem; color: var(--accent); font-weight: 500; user-select: none; }
+  .quiz-question .answer { margin-top: 0.6rem; padding: 0.75rem 1rem; background: var(--callout-bg); border-radius: 6px; font-size: 0.9rem; }
+
+  .step-num {
+    display: inline-block;
+    width: 1.8rem; height: 1.8rem;
+    line-height: 1.8rem;
+    text-align: center;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-right: 0.4rem;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>💻 第0.1课 · 命令行入门 — 终端是什么？</h1>
+
+<p style="font-size:1.05rem;color:var(--muted);">这是 Phase 0 的第一课。如果你从来没用过「命令行」或「终端」——没关系，这节课就是为你准备的。我们只学<strong>后续课程用得到</strong>的 6 个命令。</p>
+
+<div class="callout">
+  <strong>🎯 本课目标</strong>
+  学完之后，你能在自己电脑上：① 打开终端 ② 导航到指定文件夹 ③ 运行一个 Python 脚本 ④ 用 pip 安装 Python 包。这四项技能是 Phase 2+3 写代码和训练模型的前提。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>什么是「终端」？为什么需要它？</h2>
+
+<p>你平时用电脑，是通过<strong>图形界面</strong>（鼠标点击图标、菜单、按钮）。终端（Terminal，也叫命令行 / Command Line）是另一种操作电脑的方式——<strong>通过打字来给电脑下指令</strong>。</p>
+
+<p>为什么学 AI/编程需要终端？两个原因：</p>
+
+<ol>
+  <li><strong>很多 AI 工具只有命令行版本</strong>。训练模型的脚本、安装 PyTorch 的命令、启动 Jupyter Notebook——这些都是在终端里敲一行字完成的。</li>
+  <li><strong>命令行是最精确的沟通方式</strong>。图形界面每次点击在不同电脑上可能效果不同；但 <code>python train.py</code> 在任何人的电脑上都是「运行 train.py 这个文件」——精确、可复现。</li>
+</ol>
+
+<div class="callout">
+  <strong>🔑 核心类比</strong>
+  图形界面 = 在餐厅对着菜单指指点点。<br>
+  终端 = 直接对厨师说「一碗牛肉面，不放香菜」——更快、更精确，但需要你知道怎么点菜。
+</div>
+
+<h3>怎么打开终端？—— 按你的操作系统选择</h3>
+
+<div class="callout">
+  <strong>⚠️ 请先确认你用的是哪个操作系统</strong>（Windows / macOS / Linux），然后按照下面对应的方法操作。<strong>不要混着看</strong>——不同系统的终端命令不一样，混着看会出错。
+</div>
+
+<!-- ====== WINDOWS ====== -->
+<h4>🪟 Windows 用户</h4>
+
+<p><strong>方法一：Win+R（推荐，最通用）</strong></p>
+
+<ol>
+  <li>同时按下键盘上的 <kbd>Win</kbd> 键（Windows 徽标键，通常在键盘左下角，Ctrl 和 Alt 之间）和 <kbd>R</kbd> 键。</li>
+  <li>屏幕左下角会弹出一个叫<strong>「运行」</strong>的小窗口。</li>
+  <li>在输入框里输入 <code>cmd</code>（三个字母，小写），然后按 <kbd>回车（Enter）</kbd>。</li>
+  <li>弹出一个黑底白字的窗口——这就是<strong>命令提示符（CMD）</strong>，Windows 自带的终端。</li>
+</ol>
+
+<p><strong>方法二：开始菜单搜索</strong></p>
+
+<ol>
+  <li>按一下 <kbd>Win</kbd> 键（单独按，打开开始菜单）。</li>
+  <li>直接打字输入 <code>cmd</code> 或 <code>PowerShell</code>。</li>
+  <li>搜索结果中会出现「命令提示符」或「Windows PowerShell」，点击打开。</li>
+</ol>
+
+<div class="callout">
+  <strong>💡 CMD 还是 PowerShell？</strong><br>
+  对初学者来说，<strong>选 CMD（命令提示符）</strong>就够了。PowerShell 功能更强大但更复杂。本课的命令在 CMD 和 PowerShell 中都能运行——但<strong>具体命令不同</strong>（详见下文每个命令的说明）。
+</div>
+
+<p>打开后，你会看到类似这样的文字：</p>
+
+<pre><code>C:\Users\你的用户名&gt;</code></pre>
+
+<p>最后的 <code>&gt;</code> 就是<strong>提示符（Prompt）</strong>——它在说「我准备好了，请输入命令」。</p>
+
+<!-- ====== MAC ====== -->
+<h4>🍎 macOS 用户</h4>
+
+<ol>
+  <li>同时按下 <kbd>Command (⌘)</kbd> + <kbd>空格</kbd>，打开 Spotlight 搜索。</li>
+  <li>输入 <code>Terminal</code>（或中文输入「终端」）。</li>
+  <li>搜索结果中出现「终端.app」，按 <kbd>回车</kbd> 打开。</li>
+</ol>
+
+<p>打开后，你会看到类似这样的文字：</p>
+
+<pre><code>你的用户名@你的电脑名 ~ %</code></pre>
+
+<p>末尾的 <code>%</code>（新系统）或 <code>$</code>（旧系统）就是<strong>提示符（Prompt）</strong>。</p>
+
+<!-- ====== LINUX ====== -->
+<h4>🐧 Linux 用户</h4>
+
+<ol>
+  <li>同时按下 <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>。</li>
+  <li>终端窗口会自动弹出。</li>
+</ol>
+
+<p>打开后，你会看到类似这样的文字：</p>
+
+<pre><code>你的用户名@你的电脑名:~$</code></pre>
+
+<p>末尾的 <code>$</code> 就是<strong>提示符（Prompt）</strong>。</p>
+
+<hr>
+
+<p>不管哪种系统，<strong>提示符的含义都是一样的</strong>：「我在等你的命令——你想让我做什么？」在提示符后面打字，然后按回车，电脑就会执行你输入的命令。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">1</span> 你在哪？—— 查看当前位置和文件列表</h2>
+
+<p>终端运行时，永远「位于」硬盘上的<strong>某一个文件夹</strong>里。就像文件管理器有一个「当前打开的文件夹」，终端也有一个<strong>当前工作目录（Working Directory）</strong>。先搞清楚「我在哪」和「这里有什么」是一切操作的基础。</p>
+
+<!-- ====== WINDOWS ====== -->
+<h3>🪟 Windows（CMD 命令提示符）</h3>
+
+<p><strong>查看当前位置：</strong>
+
+<pre><code>C:\Users\bob&gt; cd
+C:\Users\bob           ← 在 CMD 里，直接输入 cd（不加任何参数）就显示当前目录</code></pre>
+
+<p><strong>列出当前目录下的文件：</strong></p>
+
+<pre><code>C:\Users\bob&gt; dir
+2026/07/03  14:30    &lt;DIR&gt;          Desktop
+2026/07/03  14:30    &lt;DIR&gt;          Documents
+2026/06/20  09:15              142  hello.py
+2026/06/18  16:42    &lt;DIR&gt;          data</code></pre>
+
+<p>在 Windows PowerShell 中，<code>ls</code> 和 <code>pwd</code> 也可以用（它们是 <code>dir</code> 和 <code>Get-Location</code> 的别名），但建议初学者记住原生命令：<strong><code>cd</code>（无参数）= 显示当前位置，<code>dir</code> = 列出文件</strong>。</p>
+
+<!-- ====== MAC / LINUX ====== -->
+<h3>🍎🐧 macOS / Linux</h3>
+
+<p><strong>查看当前位置 —— <code>pwd</code>（Print Working Directory）：</strong></p>
+
+<pre><code>$ pwd
+/Users/bob              ← 输出：你当前在 /Users/bob 这个文件夹里</code></pre>
+
+<p>这是最安全的命令——不改变任何东西，只是告诉你「你在哪」。</p>
+
+<p><strong>列出当前目录下的文件 —— <code>ls</code>（List）：</strong></p>
+
+<pre><code>$ ls
+Desktop                ← 桌面文件夹
+Documents              ← 文档文件夹
+hello.py               ← 一个 Python 文件
+data                   ← 数据文件夹</code></pre>
+
+<hr>
+
+<div class="callout">
+  <strong>📋 速查对照表</strong>
+  <table style="margin-top:0.5rem;">
+    <tr><th>你要做什么</th><th>Windows CMD</th><th>Windows PowerShell</th><th>macOS / Linux</th></tr>
+    <tr><td>查看当前目录</td><td><code>cd</code>（无参数）</td><td><code>pwd</code> 或 <code>Get-Location</code></td><td><code>pwd</code></td></tr>
+    <tr><td>列出文件</td><td><code>dir</code></td><td><code>ls</code> 或 <code>dir</code></td><td><code>ls</code></td></tr>
+  </table>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">2</span> 怎么移动？—— 切换目录</h2>
+
+<p>切换目录就是「双击文件夹」的终端版本。</p>
+
+<!-- ====== WINDOWS ====== -->
+<h3>🪟 Windows CMD</h3>
+
+<pre><code>C:\Users\bob&gt; cd Documents        ← 进入 Documents 文件夹
+C:\Users\bob\Documents&gt; cd          ← 无参数：显示当前位置
+C:\Users\bob\Documents
+C:\Users\bob\Documents&gt; cd ..       ← 两个点表示「上一级」
+C:\Users\bob&gt;                       ← 回来了
+C:\Users\bob&gt; cd C:\                ← 直接跳到 C 盘根目录（输入完整路径）</code></pre>
+
+<p>Windows 路径用<strong>反斜杠 <code>\</code></strong> 分隔：<code>C:\Users\bob\Documents</code></p>
+
+<!-- ====== MAC / LINUX ====== -->
+<h3>🍎🐧 macOS / Linux</h3>
+
+<pre><code>$ cd Documents        ← 进入 Documents 文件夹
+$ pwd
+/Users/bob/Documents   ← 确认：现在在 Documents 里了
+
+$ cd ..               ← 两个点表示「上一级」
+$ pwd
+/Users/bob             ← 回来了
+
+$ cd ~                ← 波浪号 = 用户主目录（回家）
+$ pwd
+/Users/bob</code></pre>
+
+<p>macOS / Linux 路径用<strong>正斜杠 <code>/</code></strong> 分隔：<code>/Users/bob/Documents</code></p>
+
+<hr>
+
+<h3>常用路径符号（所有系统通用）</h3>
+<table>
+  <tr><td><code>.</code></td><td>当前目录（「就在这儿」）</td></tr>
+  <tr><td><code>..</code></td><td>上一级目录（「退回一步」）</td></tr>
+  <tr><td><code>~</code></td><td>用户主目录（「回家」）。macOS/Linux 原生支持；Windows CMD 不支持，PowerShell 支持</td></tr>
+</table>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">3</span> 怎么运行 Python？—— <code>python</code></h2>
+
+<p>在终端里输入 <code>python 文件名</code>，就是让 Python 解释器去执行那个文件：</p>
+
+<pre><code>$ python hello.py
+你好，世界！           ← 这是 hello.py 运行后打印的输出</code></pre>
+
+<p>前提是：① 你的电脑安装了 Python ② 终端当前在 hello.py 所在的文件夹里（用 <code>cd</code> 导航过去）。</p>
+
+<div class="callout">
+  <strong>⚠️ 常见问题</strong>
+  如果输入 <code>python</code> 后提示「不是内部或外部命令」，说明 Python 没有正确安装或没有添加到系统 PATH。去 <a href="https://python.org">python.org</a> 下载安装时，<strong>一定要勾选「Add Python to PATH」</strong>（把 Python 加到系统路径）这个复选框。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">4</span> 怎么安装 Python 包？—— <code>pip install</code></h2>
+
+<p>Python 自带的功能有限。PyTorch、NumPy、Jupyter 这些需要额外安装。安装命令是 <code>pip install</code>：</p>
+
+<pre><code>$ pip install torch numpy jupyter</code></pre>
+
+<p>一行命令可以同时安装多个包。pip 会自动下载、解压、放到正确的位置。你以后看到任何教程里写 <code>pip install xxx</code>，就知道是在终端里敲这一行。</p>
+
+<p>三个最常用的 pip 命令：</p>
+
+<pre><code>$ pip install 包名         ← 安装
+$ pip list                 ← 查看已安装了哪些包
+$ pip show 包名            ← 查看某个包的详细信息（版本、位置等）</code></pre>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 交互实验：模拟终端</h2>
+
+<p>下面是一个在浏览器里运行的<strong>模拟终端</strong>。试试上述命令——<strong>点击下方的黑色区域，然后打字</strong>。按回车执行。</p>
+
+<div class="terminal-sim" id="term-sim">
+  <div class="titlebar">
+    <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+    <span class="tname">终端模拟器 — 试试输入命令</span>
+  </div>
+  <div class="screen" id="term-screen">
+    <div class="line hint">👋 欢迎！这是一个模拟终端。试试下面的命令（macOS/Linux 风格）：</div>
+    <div class="line hint">  python — 进入 Python 交互模式（REPL）</div>
+    <div class="line hint">  python hello.py — 运行 Python 脚本</div>
+    <div class="line hint">  pwd — 查看当前目录（Windows: cd 不加参数）</div>
+    <div class="line hint">  ls — 列出文件（Windows: dir）</div>
+    <div class="line hint">  cd 文件夹名 — 进入文件夹</div>
+    <div class="line hint">  cd .. — 返回上一级</div>
+    <div class="line hint">  pip install 包名 — 安装 Python 包</div>
+    <div class="line hint">  clear — 清屏</div>
+    <div class="line hint" style="margin-bottom:0.5rem;">  help — 再次显示此帮助</div>
+  </div>
+</div>
+
+<script src="../assets/python-interpreter.js"></script>
+<script>
+(function() {
+  const screen = document.getElementById('term-screen');
+
+  // Python REPL state
+  let pythonMode = false;
+  let pythonBuffer = [];  // for multi-line input
+  let pythonVars = {};    // persistent variables across REPL lines
+
+  // Virtual file system
+  const fs = {
+    '/home/user': {
+      type: 'dir',
+      children: {
+        'hello.py': { type: 'file', content: 'print("你好，世界！")\nprint("1 + 2 + 3 =", 1 + 2 + 3)\nprint("Python 版本: 3.11.0")' },
+        'project': {
+          type: 'dir',
+          children: {
+            'train.py': { type: 'file', content: '# 训练脚本\nimport torch\nprint("开始训练...")' },
+            'config.json': { type: 'file', content: '{"batch_size": 64, "lr": 0.001}' },
+          }
+        },
+        'data': {
+          type: 'dir',
+          children: {
+            'text.txt': { type: 'file', content: '人工智能正在改变世界。' },
+            'words.txt': { type: 'file', content: '你好\n世界\n人工智能\n学习' },
+          }
+        },
+        'README.md': { type: 'file', content: '# 我的 AI 项目\n这是一个大模型训练项目。' },
+      }
+    }
+  };
+
+  let cwd = '/home/user';
+
+  function resolvePath(p) {
+    if (!p || p === '.') return cwd;
+    if (p === '..') {
+      if (cwd === '/home/user') return '/home/user';
+      const parts = cwd.split('/').filter(Boolean);
+      parts.pop();
+      return '/' + parts.join('/') || '/home/user';
+    }
+    if (p.startsWith('/')) return p;
+    return cwd === '/' ? '/' + p : cwd + '/' + p;
+  }
+
+  function getNode(p) {
+    if (p === '/home/user') return fs['/home/user'];
+    const parts = p.replace('/home/user/', '').split('/').filter(Boolean);
+    let node = fs['/home/user'];
+    for (const part of parts) {
+      if (!node || node.type !== 'dir' || !node.children) return null;
+      node = node.children[part];
+    }
+    return node || null;
+  }
+
+  function getPrompt() {
+    if (pythonMode) {
+      return pythonBuffer.length > 0 ? '... ' : '>>> ';
+    }
+    const short = cwd === '/home/user' ? '~' : '~/' + cwd.replace('/home/user/', '');
+    return 'user@电脑 ' + short + ' $';
+  }
+
+  function addLine(text, cls) {
+    const div = document.createElement('div');
+    div.className = 'line ' + (cls || '');
+    div.textContent = text;
+    screen.appendChild(div);
+    screen.scrollTop = screen.scrollHeight;
+  }
+
+  function addCmdLine(cmd) {
+    const div = document.createElement('div');
+    div.className = 'line cmd';
+    div.innerHTML = '<span style="color:#5f5;">' + getPrompt() + '</span> ' + cmd;
+    screen.appendChild(div);
+    screen.scrollTop = screen.scrollHeight;
+  }
+
+  function execute(cmd) {
+    addCmdLine(cmd);
+    const parts = cmd.trim().split(/\s+/);
+    const command = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    switch (command) {
+      case '': break;
+
+      case 'help':
+        addLine('可用命令（macOS/Linux 风格）：', 'hint');
+        addLine('  python — 进入 Python 交互模式（输入 exit() 退出）', 'hint');
+        addLine('  python 文件名 — 运行 Python 脚本', 'hint');
+        addLine('  python -c "代码" — 执行单行 Python 代码', 'hint');
+        addLine('  pwd — 查看当前目录', 'hint');
+        addLine('  ls — 列出文件', 'hint');
+        addLine('  cd <目录> — 进入目录', 'hint');
+        addLine('  cd .. — 返回上一级', 'hint');
+        addLine('  cd ~ — 回到主目录', 'hint');
+        addLine('  pip install <包名> — 安装 Python 包', 'hint');
+        addLine('  pip list — 查看已安装的包', 'hint');
+        addLine('  echo <文字> — 打印文字', 'hint');
+        addLine('  clear — 清屏', 'hint');
+        addLine('', 'hint');
+        addLine('Windows 风格命令也可用：', 'hint');
+        addLine('  dir — 列出文件（= ls）', 'hint');
+        addLine('  cd（不带参数）— 显示当前位置（= pwd）', 'hint');
+        break;
+
+      case 'pwd':
+        addLine(cwd);
+        break;
+
+      case 'ls':
+      case 'dir':
+        const node = getNode(cwd);
+        if (node && node.type === 'dir' && node.children) {
+          const names = Object.keys(node.children);
+          if (names.length === 0) {
+            addLine('（空目录）', 'hint');
+          } else {
+            const colored = names.map(n => {
+              const child = node.children[n];
+              if (child.type === 'dir') return n + '/';
+              if (n.endsWith('.py')) return n;
+              return n;
+            }).join('  ');
+            addLine(colored);
+          }
+        } else {
+          addLine('无法访问目录', 'err');
+        }
+        break;
+
+      case 'cd':
+        if (args.length === 0) {
+          // Windows CMD: cd with no args = print working directory (like pwd)
+          addLine(cwd);
+        } else if (args[0] === '~') {
+          cwd = '/home/user';
+        } else {
+          const target = resolvePath(args[0]);
+          const targetNode = getNode(target);
+          if (targetNode && targetNode.type === 'dir') {
+            cwd = target;
+          } else if (!targetNode) {
+            addLine('cd: 没有那个文件或目录: ' + args[0], 'err');
+          } else {
+            addLine('cd: ' + args[0] + ' 不是一个目录', 'err');
+          }
+        }
+        break;
+
+      case 'python':
+      case 'python3':
+        if (args.length === 0) {
+          // Enter interactive Python REPL mode
+          pythonMode = true;
+          pythonBuffer = [];
+          pythonVars = {};
+          addLine('Python 3.11.0 (简化版，浏览器内运行)', 'hint');
+          addLine('输入 Python 代码，按回车执行。输入 exit() 退出。', 'hint');
+        } else if (args[0] === '-c') {
+          // python -c "code" — run a one-liner
+          const code = args.slice(1).join(' ');
+          addLine('→ 执行: ' + code, 'hint');
+          try {
+            const result = runPython(code, { imports: {} });
+            for (const line of result.output) {
+              addLine(line, 'out');
+            }
+          } catch (e) {
+            addLine('❌ 错误: ' + (e.message || String(e)), 'err');
+          }
+        } else {
+          // python file.py — actually run the file through the interpreter
+          const fileNode = getNode(resolvePath(args[0]));
+          if (fileNode && fileNode.type === 'file' && (args[0].endsWith('.py') || args[0].endsWith('.txt'))) {
+            addLine('→ 运行 ' + args[0] + ' ...');
+            try {
+              const result = runPython(fileNode.content, { imports: {} });
+              for (const line of result.output) {
+                addLine(line, 'out');
+              }
+              addLine('→ 执行完毕', 'hint');
+            } catch (e) {
+              addLine('❌ 错误: ' + (e.message || String(e)), 'err');
+            }
+          } else if (fileNode && fileNode.type === 'file') {
+            // Non-Python file — show its content
+            addLine('→ ' + args[0] + ' 的内容:');
+            addLine(fileNode.content);
+          } else {
+            addLine('python: 无法打开文件: ' + args[0], 'err');
+            addLine('  提示：文件可能不存在，或不在当前目录。用 ls 查看当前目录的文件。', 'hint');
+          }
+        }
+        break;
+
+      case 'pip':
+        if (args[0] === 'install') {
+          const pkg = args.slice(1).join(' ');
+          if (!pkg || pkg === '包名') {
+            addLine('用法：pip install 包名  例如：pip install torch', 'hint');
+          } else {
+            addLine('正在下载 ' + pkg + '...');
+            addLine('正在安装 ' + pkg + '...');
+            addLine('✓ ' + pkg + ' 安装成功！', 'out');
+          }
+        } else if (args[0] === 'list') {
+          addLine('Package    Version');
+          addLine('---------- -------');
+          addLine('torch      2.5.0');
+          addLine('numpy      1.26.0');
+          addLine('jupyter    1.0.0');
+        } else if (args[0] === 'show') {
+          const pkg = args[1] || '未知';
+          addLine('Name: ' + pkg);
+          addLine('Version: 1.0.0');
+          addLine('Location: /usr/lib/python3/site-packages');
+        } else {
+          addLine('pip 常用命令：pip install | pip list | pip show', 'hint');
+        }
+        break;
+
+      case 'echo':
+        addLine(args.join(' '));
+        break;
+
+      case 'clear':
+        screen.querySelectorAll('.line').forEach(el => el.remove());
+        break;
+
+      default:
+        addLine('命令未找到: ' + command, 'err');
+        addLine('  输入 help 查看可用命令', 'hint');
+    }
+  }
+
+  // Create input line
+  const inputLine = document.createElement('div');
+  inputLine.className = 'input-line';
+  const promptSpan = document.createElement('span');
+  promptSpan.className = 'prompt';
+  promptSpan.textContent = getPrompt();
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  input.placeholder = '在此输入命令，回车执行...';
+
+  inputLine.appendChild(promptSpan);
+  inputLine.appendChild(input);
+  screen.appendChild(inputLine);
+
+  // Focus input when clicking anywhere on screen
+  screen.addEventListener('click', () => input.focus());
+
+  function updatePrompt() {
+    promptSpan.textContent = getPrompt();
+    input.placeholder = pythonMode ? '输入 Python 代码，exit() 退出...' : '在此输入命令，回车执行...';
+  }
+
+  function runPythonCode(code) {
+    // Use the shared interpreter from python-interpreter.js
+    const result = runPython(code, { imports: {} });
+    for (const line of result.output) {
+      addLine(line, 'out');
+    }
+    // Merge variables back so they persist across REPL lines
+    if (result.variables) {
+      Object.assign(pythonVars, result.variables);
+    }
+    return result;
+  }
+
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      const cmd = input.value;
+      input.value = '';
+
+      if (pythonMode) {
+        handlePythonInput(cmd);
+      } else {
+        execute(cmd);
+      }
+      updatePrompt();
+    }
+    // Tab completion
+    if (e.key === 'Tab' && !pythonMode) {
+      e.preventDefault();
+      const typed = input.value.trim();
+      const node = getNode(cwd);
+      if (node && node.type === 'dir' && node.children) {
+        const matches = Object.keys(node.children).filter(n => n.startsWith(typed));
+        if (matches.length === 1) {
+          input.value = matches[0];
+        } else if (matches.length > 1) {
+          addLine(matches.join('  '), 'hint');
+        }
+      }
+    }
+    // Up arrow
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      addLine('（提示：真实终端按 ↑ 可以回溯历史命令）', 'hint');
+    }
+  });
+
+  // ========== Python REPL mode ==========
+
+  function handlePythonInput(line) {
+    const trimmed = line.trim();
+
+    // exit() quits Python mode
+    if (trimmed === 'exit()' || trimmed === 'quit()') {
+      if (pythonBuffer.length > 0) {
+        pythonBuffer = [];
+      }
+      // Show the exit command with Python prompt before switching
+      addLine('>>> exit()', 'cmd');
+      pythonMode = false;
+      pythonBuffer = [];
+      addLine('→ 已退出 Python 模式，回到终端', 'hint');
+      return;
+    }
+
+    if (trimmed === '') {
+      if (pythonBuffer.length > 0) {
+        // Empty line = execute the buffered block
+        addLine('', '');  // blank line in output
+        const code = pythonBuffer.join('\n');
+        for (const bufLine of pythonBuffer) {
+          addLine('... ' + bufLine, 'cmd');
+        }
+        executePythonBlock(code);
+        pythonBuffer = [];
+        return;
+      }
+      // Plain empty line in REPL, just show it
+      addLine('>>> ', 'cmd');
+      return;
+    }
+
+    // Check if this line starts a block (ends with ':')
+    if (trimmed.endsWith(':') && (trimmed.startsWith('if ') || trimmed.startsWith('elif ') ||
+        trimmed.startsWith('else') || trimmed.startsWith('for ') || trimmed.startsWith('def '))) {
+      // Start of a multi-line block
+      if (pythonBuffer.length > 0) {
+        // Flush existing buffer first
+        const code = pythonBuffer.join('\n');
+        executePythonBlock(code);
+        pythonBuffer = [];
+      }
+      pythonBuffer.push(trimmed);
+      addLine('>>> ' + trimmed, 'cmd');
+      return;
+    }
+
+    // Check if this is a continuation line (indented)
+    if (pythonBuffer.length > 0 && (line.startsWith('    ') || line.startsWith('\t'))) {
+      pythonBuffer.push(line);
+      addLine('... ' + line, 'cmd');
+      return;
+    }
+
+    // If we have a buffer and this line is not indented, flush the buffer first
+    if (pythonBuffer.length > 0) {
+      const code = pythonBuffer.join('\n');
+      executePythonBlock(code);
+      pythonBuffer = [];
+    }
+
+    // Single-line execution
+    addLine('>>> ' + trimmed, 'cmd');
+    executePythonLine(trimmed);
+  }
+
+  function executePythonBlock(code) {
+    try {
+      const result = runPython(code, { imports: {} });
+      for (const line of result.output) {
+        addLine(line, 'out');
+      }
+      if (result.variables) {
+        Object.assign(pythonVars, result.variables);
+      }
+    } catch (e) {
+      addLine('❌ 错误: ' + (e.message || String(e)), 'err');
+    }
+  }
+
+  function executePythonLine(code) {
+    try {
+      const result = runPython(code, { imports: {} });
+      for (const line of result.output) {
+        addLine(line, 'out');
+      }
+      if (result.variables) {
+        Object.assign(pythonVars, result.variables);
+      }
+    } catch (e) {
+      addLine('❌ 错误: ' + (e.message || String(e)), 'err');
+    }
+  }
+
+  // ========== Shell command execution ==========
+
+  // Initial focus
+  setTimeout(() => input.focus(), 300);
+})();
+</script>
+
+<p style="font-size:0.75rem;color:var(--muted);margin-top:0.3rem;">💡 试试：<code>python</code> 进入交互模式 → <code>print(1+1)</code> → <code>exit()</code>。或者 <code>python hello.py</code> 直接运行文件。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>终端操作小贴士</h2>
+
+<table>
+  <tr><th>快捷键 / 技巧</th><th>作用</th></tr>
+  <tr><td><code>Tab</code></td><td>自动补全。输入文件名的前几个字母，按 Tab，终端自动补全。大幅减少打字量。</td></tr>
+  <tr><td><code>↑ / ↓</code></td><td>回溯历史命令。按 ↑ 回到上一条命令，不用重新打。</td></tr>
+  <tr><td><code>Ctrl + C</code></td><td>终止当前正在运行的程序。如果训练中途想停，按这个。</td></tr>
+  <tr><td><code>Ctrl + L</code> 或 <code>clear</code></td><td>清屏。屏幕太乱了？一键清空。</td></tr>
+  <tr><td>文件路径中的空格</td><td>如果文件夹名有空格（如 "My Documents"），用引号包起来：<code>cd "My Documents"</code></td></tr>
+  <tr><td>复制粘贴</td><td>Windows 终端：Ctrl+C/V 或右键。Mac 终端：Command+C/V。</td></tr>
+</table>
+
+<div class="callout">
+  <strong>⚠️ Windows 用户请注意</strong><br><br>
+  <strong>1. 路径分隔符不同</strong>：Windows 用反斜杠 <code>\</code>（例如 <code>C:\Users\bob\project</code>），macOS/Linux 用正斜杠 <code>/</code>（例如 <code>/Users/bob/project</code>）。这是历史原因造成的，知道就好。<br><br>
+  <strong>2. CMD 命令 ≠ Linux 命令</strong>：很多网上教程默认你在用 Mac/Linux，写的命令是 <code>ls</code>、<code>pwd</code>、<code>rm</code> 等。这些命令在 Windows CMD 里<strong>不起作用</strong>。如果你在 CMD 里输入 <code>ls</code> 看到「不是内部或外部命令」，说明这是 Linux 命令——在 CMD 里换成对应的 Windows 命令（如 <code>dir</code>）。<strong>PowerShell</strong> 对 Linux 命令的兼容性更好（支持 <code>ls</code>），如果你习惯用 Linux 风格，可以用 PowerShell 代替 CMD。<br><br>
+  <strong>3. 后续 Phase 2+3 的 AI/机器学习代码建议使用以下方案之一</strong>：<br>
+  &nbsp;&nbsp;• <strong>Git Bash</strong>：搜索 "Git for Windows" 下载安装，它会给你一个和本课模拟终端体验一致的命令行环境（支持 <code>ls</code>、<code>pwd</code> 等 Linux 命令）。<br>
+  &nbsp;&nbsp;• <strong>WSL</strong>（Windows Subsystem for Linux）：Windows 内置的 Linux 子系统，AI 社区最推荐的方案。<br>
+  &nbsp;&nbsp;• <strong>PowerShell</strong>：Windows 自带，比 CMD 强大，对本课的命令兼容性也更好。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 小测验</h2>
+
+<div class="quiz">
+
+<div class="quiz-question">
+  <h4>问题 1/3 — 导航</h4>
+  <p>你当前在 <code>/home/user/project</code>。输入什么命令可以回到 <code>/home/user</code>？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong><code>cd ..</code></strong><br>
+      <code>..</code> 表示「上一级目录」。project 的上一级是 user。也可以用 <code>cd ~</code> 直接回家（如果 ~ 指向 /home/user）。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 2/3 — 运行脚本</h4>
+  <p>你写了一个 Python 文件叫 <code>train.py</code>，放在当前目录。怎么在终端里运行它？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong><code>python train.py</code></strong><br>
+      前提：① 终端当前在 train.py 所在的目录（用 <code>ls</code> 确认能看到它）② 电脑已安装 Python。如果系统同时装了 Python 2 和 3，可能需要用 <code>python3 train.py</code>。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 3/3 — 安装包</h4>
+  <p>你打开了一个 AI 项目的 README，第一行写着「请先运行 <code>pip install torch numpy</code>」。这条命令应该在<strong>哪里</strong>执行？它会做什么？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>在终端（命令行）里执行。</strong>它会从 Python 包仓库（PyPI）下载 torch 和 numpy 两个包，自动安装到你的 Python 环境中。<br><br>
+      不需要在 Python 代码里写这行——<code>pip install</code> 是终端命令，不是 Python 代码。
+    </div>
+  </details>
+</div>
+
+</div>
+
+<hr>
+
+<h2>📺 推荐观看</h2>
+
+<ul>
+  <li><strong><a href="https://www.bilibili.com/video/BV1sW411a7Hx">B站 · 命令行入门教程（中文）</a></strong> — 20 分钟，从零讲起，适合完全没接触过终端的同学。</li>
+</ul>
+
+<hr>
+
+<nav class="lesson-nav">
+  <span></span>
+  <a href="0000-02-python-basics-1.html">下一课：Python 速通（上）→</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>🤖 终端是 AI 工程师的「方向盘」——训练模型、安装包、管理文件，全都通过它。刚开始不习惯很正常，用两天就肌肉记忆了。下一课学 Python 基础——不要求成为程序员，只需要「能看懂代码」。有问题随时问 Bib。</p>
+</footer>
+
+</body>
+</html>

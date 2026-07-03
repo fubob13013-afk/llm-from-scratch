@@ -1,0 +1,240 @@
+/* === LLM Learning Workspace — Shared Stylesheet === */
+/* Tufte-inspired, print-friendly, Chinese-optimized */
+
+/* --- Reset & Base --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #fffff8;
+  --text: #111;
+  --muted: #555;
+  --faint: #999;
+  --accent: #c44;
+  --link: #a33;
+  --rule: #ddd;
+  --code-bg: #f5f4f0;
+  --callout-bg: #fef9f0;
+  --callout-border: #f0c060;
+  --side-width: 260px;
+  --body-width: 640px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a18;
+    --text: #e8e4dc;
+    --muted: #b0aca4;
+    --faint: #706c64;
+    --accent: #e88;
+    --link: #e88;
+    --rule: #3a3834;
+    --code-bg: #2a2824;
+    --callout-bg: #282420;
+    --callout-border: #8a6820;
+  }
+}
+
+html {
+  font-size: 18px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: "Source Serif 4", "Noto Serif CJK SC", "STSong", "SimSun", Georgia, serif;
+  background: var(--bg);
+  color: var(--text);
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 6rem;
+}
+
+/* --- Typography --- */
+h1, h2, h3, h4 {
+  font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+h1 { font-size: 2rem; margin: 0 0 1.5rem; letter-spacing: -0.02em; }
+h2 { font-size: 1.35rem; margin: 2.5rem 0 0.75rem; padding-top: 0.5rem; }
+h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+
+p { margin: 0 0 1rem; }
+p + p { text-indent: 0; }
+
+a { color: var(--link); text-decoration: none; border-bottom: 1px solid var(--rule); }
+a:hover { border-bottom-color: var(--accent); }
+
+strong { font-weight: 600; color: var(--text); }
+
+/* --- Blockquote (for key takeaways) --- */
+blockquote {
+  margin: 1.5rem 0;
+  padding: 0.75rem 1.25rem;
+  border-left: 3px solid var(--accent);
+  background: var(--callout-bg);
+  font-style: italic;
+  color: var(--muted);
+}
+blockquote p { margin: 0; }
+
+/* --- Code --- */
+code {
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 0.85rem;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+pre {
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--code-bg);
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+pre code {
+  background: none;
+  padding: 0;
+  white-space: pre;
+  font-size: inherit;
+}
+
+/* --- Callout boxes --- */
+.callout {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--callout-bg);
+  border: 1px solid var(--callout-border);
+  border-radius: 6px;
+}
+.callout strong:first-child {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  font-weight: 600;
+}
+
+/* --- Pipeline / Flow diagram --- */
+.pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 1.5rem 0;
+  font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+}
+.pipeline .stage {
+  background: var(--callout-bg);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  text-align: center;
+  min-width: 90px;
+  flex: 1 0 auto;
+}
+.pipeline .stage .label { font-size: 0.85rem; font-weight: 600; }
+.pipeline .stage .sub  { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
+.pipeline .arrow { color: var(--faint); font-size: 1.2rem; flex: 0 0 auto; }
+
+/* --- Tables --- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.9rem;
+}
+th, td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+}
+th {
+  font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* --- Lists --- */
+ul, ol { margin: 0.75rem 0 1rem; padding-left: 1.5rem; }
+li { margin-bottom: 0.4rem; }
+
+/* --- Definition lists (for glossary-style content) --- */
+dl { margin: 1rem 0; }
+dt {
+  font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  font-weight: 600;
+  margin-top: 0.75rem;
+  color: var(--text);
+}
+dd {
+  margin-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* --- Horizontal rule --- */
+hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 2.5rem 0;
+}
+
+/* --- Back to home --- */
+a.back-home {
+  display: inline-block;
+  font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  font-size: 0.8rem;
+  color: var(--faint);
+  text-decoration: none;
+  border-bottom: none;
+  margin-bottom: 1.25rem;
+  transition: color 0.2s;
+}
+a.back-home:hover { color: var(--accent); }
+
+/* --- Navigation --- */
+nav.lesson-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 3rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.85rem;
+}
+nav.lesson-nav a { border-bottom: none; }
+
+/* --- Footer --- */
+footer.lesson-footer {
+  margin-top: 2rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--rule);
+  font-size: 0.8rem;
+  color: var(--faint);
+}
+
+/* --- Print --- */
+@media print {
+  body { max-width: none; padding: 1rem; font-size: 12pt; }
+  nav.lesson-nav, footer.lesson-footer, a.back-home { display: none; }
+  a { color: var(--text); border-bottom: none; }
+  @page { margin: 1.5cm; }
+}
+
+/* --- Responsive --- */
+@media (max-width: 640px) {
+  html { font-size: 16px; }
+  body { padding: 1.25rem 1rem 4rem; }
+  .pipeline { flex-direction: column; }
+  .pipeline .arrow { transform: rotate(90deg); }
+}

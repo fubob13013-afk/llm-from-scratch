@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第1课 · LLM 做什么？—— 预测下一个词</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .demo-area {
+    margin: 1.5rem 0;
+    padding: 1.25rem;
+    background: var(--code-bg);
+    border: 2px solid var(--rule);
+    border-radius: 10px;
+  }
+  .demo-area h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
+  }
+  .demo-input {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    font-size: 1rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Source Serif 4", "Noto Serif CJK SC", serif;
+    margin-bottom: 0.75rem;
+  }
+  .demo-output {
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.8;
+    padding: 0.75rem 1rem;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    min-height: 3rem;
+  }
+  .demo-output .token-box {
+    display: inline-block;
+    padding: 2px 6px;
+    margin: 1px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+  }
+  .demo-output .token-input {
+    background: #e8f0fe;
+    color: #333;
+  }
+  .demo-output .token-pred {
+    background: #fef0e8;
+    color: #a33;
+    font-weight: 700;
+    border: 2px dashed var(--accent);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @media (prefers-color-scheme: dark) {
+    .demo-output .token-input { background: #1a2a30; color: #ccc; }
+    .demo-output .token-pred { background: #2a2018; color: #e88; }
+  }
+  @keyframes pulse {
+    0%, 100% { border-color: var(--accent); }
+    50% { border-color: transparent; }
+  }
+
+  .quiz { margin: 2rem 0; }
+  .quiz-question {
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+  }
+  .quiz-question h4 { margin: 0 0 0.75rem; font-size: 1rem; }
+  .quiz-question details { margin-top: 0.75rem; }
+  .quiz-question summary {
+    cursor: pointer;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.85rem;
+    color: var(--accent);
+    font-weight: 500;
+    user-select: none;
+  }
+  .quiz-question .answer {
+    margin-top: 0.6rem;
+    padding: 0.75rem 1rem;
+    background: var(--callout-bg);
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🤖 第1课 · LLM 做什么？—— 预测下一个词</h1>
+
+<p>这是整个课程的第一课。我们不碰任何公式，不做任何计算。<strong>只建立一件事：LLM 到底在干什么？</strong></p>
+
+<p>答案是四个字：<strong>猜下一个词</strong>。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>一个实验：你来当 LLM</h2>
+
+<p>读下面这句话，猜横线上最可能是什么词：</p>
+
+<blockquote>
+  <p style="font-size:1.2rem;">中国的首都是_____</p>
+</blockquote>
+
+<p>你脑子里大概率蹦出了「北京」。换一个：</p>
+
+<blockquote>
+  <p style="font-size:1.2rem;">他打开冰箱，拿出一瓶冰镇的_____</p>
+</blockquote>
+
+<p>「可乐」「啤酒」「矿泉水」——你的大脑根据前半句的语境，从你毕生所学的中文知识中，选出了概率最高的几个候选词。你刚刚就做了一次<strong>语言模型推理</strong>。</p>
+
+<p>LLM 做的事和你刚才做的<strong>一模一样</strong>——只不过：</p>
+
+<ul>
+  <li>它读过的文本比你多几百万倍（整个互联网的文本）</li>
+  <li>它做这个选择不是靠「直觉」，而是靠<strong>数学计算</strong></li>
+  <li>它每秒钟能做几万次这样的预测</li>
+</ul>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>给这个任务一个正式名字</h2>
+
+<p>在人工智能领域，这个任务叫：</p>
+
+<blockquote>
+  <p><strong>给定前面的所有词，预测下一个词的概率分布。</strong></p>
+</blockquote>
+
+<p>拆开来看：</p>
+
+<dl>
+  <dt>「前面的所有词」= 上下文（Context）</dt>
+  <dd>就是模型能看到的已输入的文本。GPT-4 的上下文窗口最多可以看 128,000 个 token——差不多一本小说的长度。</dd>
+
+  <dt>「下一个词」= 目标（Target）</dt>
+  <dd>模型要猜的那个词。在训练数据中这个答案是已知的——这就构成了「输入→正确答案」的训练对。</dd>
+
+  <dt>「概率分布」</dt>
+  <dd>模型不会只输出一个词。它输出的是<strong>每个可能词的得分</strong>——「北京 92%，上海 4%，广州 2%，……」。这个得分表就是概率分布。</dd>
+</dl>
+
+<div class="callout">
+  <strong>🔑 核心心智模型</strong>
+  把 LLM 想象成一个<strong>超级输入法</strong>。你手机上的输入法在你打了「我今天想去」之后，会推荐「吃饭/逛街/睡觉/上班」。LLM 做的是同一件事——只是它看的不是前 10 个字，而是前 10 万个 token；它的候选词不是 50 个，而是 5 万个。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>数据自己就是「标准答案」—— 自监督学习</h2>
+
+<p>训练 LLM 不需要雇人标注数据。这是它最精妙的地方。</p>
+
+<p>假设你有这段文本：</p>
+
+<pre><code>人工智能正在改变世界</code></pre>
+
+<p>训练样本是自动生成的——把每个位置变成一道「填空题」：</p>
+
+<table>
+  <tr><th>输入（模型看到的）</th><th>正确答案（模型要猜的）</th></tr>
+  <tr><td>_____</td><td>人工</td></tr>
+  <tr><td>人工</td><td>智能</td></tr>
+  <tr><td>人工 智能</td><td>正在</td></tr>
+  <tr><td>人工 智能 正在</td><td>改变</td></tr>
+  <tr><td>人工 智能 正在 改变</td><td>世界</td></tr>
+</table>
+
+<p>每道填空题的<strong>答案已经在原文里了</strong>。把整个互联网的文本都做成这样的填空题，就是几万亿道练习题。这种「数据自带标签」的学习方式叫<strong>自监督学习（Self-Supervised Learning）</strong>。</p>
+
+<div class="callout">
+  <strong>🔑 关键洞察</strong>
+  LLM 训练不需要人工标注。你用百度百科、知乎、GitHub、小红书帖子训练它——这些文本的作者在写的时候，已经无意中给每个位置填上了「标准答案」。模型要做的就是在每个位置猜，猜错了就根据差距调整自己的参数。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 交互实验：感受「猜下一个词」</h2>
+
+<p>下面是一个简化版的演示。你输入一段文本，程序会模拟 LLM 的行为——把输入分词，然后展示模型在每个位置要预测的下一个 token。</p>
+
+<div class="demo-area">
+  <h4>🔤 Token 预测演示器</h4>
+  <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
+    输入一段中文，观察它被切成多少个 token，以及每个位置模型要预测的目标。
+  </p>
+  <input class="demo-input" id="demo-input" type="text"
+         value="人工智能正在改变世界"
+         placeholder="输入一段中文文本...">
+  <div class="demo-output" id="demo-output"></div>
+  <p style="font-size:0.7rem;color:var(--muted);margin-top:0.5rem;">
+    🟦 蓝色 = 输入 token（模型看到的）&nbsp;&nbsp;🟧 橙色虚线 = 要预测的目标 token
+  </p>
+</div>
+
+<script>
+(function() {
+  // Simple character-level tokenization for demo purposes
+  function tokenize(text) {
+    // Split into meaningful chunks (simplified: 2-char chunks for common patterns)
+    const tokens = [];
+    const specials = ['人工智能', '机器', '学习', '正在', '改变', '世界', '中国', '北京',
+                      '数据', '模型', '训练', '语言', '计算', '网络', '算法'];
+    let i = 0;
+    while (i < text.length) {
+      let matched = false;
+      for (const s of specials) {
+        if (text.slice(i, i + s.length) === s) {
+          tokens.push(s);
+          i += s.length;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        tokens.push(text[i]);
+        i++;
+      }
+    }
+    return tokens;
+  }
+
+  function update() {
+    const text = document.getElementById('demo-input').value;
+    if (!text.trim()) {
+      document.getElementById('demo-output').innerHTML =
+        '<span style="color:var(--faint);">输入一些文字来看效果……</span>';
+      return;
+    }
+    const tokens = tokenize(text);
+    const container = document.getElementById('demo-output');
+
+    // Show: for each position, the input tokens and the target token
+    let html = '';
+    for (let t = 0; t < tokens.length; t++) {
+      // Input tokens: positions 0 to t-1
+      html += '<div style="margin-bottom:0.5rem;">';
+      html += '<span style="font-size:0.7rem;color:var(--faint);margin-right:0.5rem;">位置' + (t+1) + '</span>';
+
+      // Input tokens
+      for (let j = 0; j < t; j++) {
+        html += '<span class="token-box token-input">' + tokens[j] + '</span>';
+      }
+      // Arrow
+      html += '<span style="margin:0 4px;color:var(--faint);">→</span>';
+      // Target token
+      html += '<span class="token-box token-pred">' + tokens[t] + '</span>';
+
+      html += '</div>';
+    }
+    // Last position: predict end
+    html += '<div style="margin-bottom:0.5rem;">';
+    html += '<span style="font-size:0.7rem;color:var(--faint);margin-right:0.5rem;">位置' + (tokens.length+1) + '</span>';
+    for (let j = 0; j < tokens.length; j++) {
+      html += '<span class="token-box token-input">' + tokens[j] + '</span>';
+    }
+    html += '<span style="margin:0 4px;color:var(--faint);">→</span>';
+    html += '<span class="token-box token-pred">[EOS]</span>';
+    html += '<span style="font-size:0.7rem;color:var(--faint);margin-left:0.3rem;">结束符</span>';
+    html += '</div>';
+
+    container.innerHTML = html;
+  }
+
+  document.getElementById('demo-input').addEventListener('input', update);
+  update();
+})();
+</script>
+
+<p>注意观察：<strong>每个位置的输入，正好是上一个位置的输入 + 上一个位置的目标</strong>。这就是为什么不需要人工标注——文本自己就是一条连续的链条，每个词都在为前面的词提供「标准答案」。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>从「猜词」到「对话」—— 一个自然的结果</h2>
+
+<p>你可能会问：如果 LLM 只是一个「超级输入法」，它怎么做到回答问题、写诗、写代码这些看起来需要「理解」的事情？</p>
+
+<p>答案令人意外：<strong>它不需要理解。它只需要把「对话」也当成一种文本模式来续写。</strong></p>
+
+<p>训练好的模型看到：</p>
+
+<pre><code>用户：法国的首都是哪里？
+助手：</code></pre>
+
+<p>它续写出「巴黎」——不是因为它知道地理，而是因为在几万亿字的训练数据中，这段文字后面最常出现的那个词就是「巴黎」。</p>
+
+<p>这并不是说 LLM 「不懂」——<strong>当预测下一个词的准确率高到一定程度时，它表现出的行为和「理解」难以区分</strong>。这就像一个乒乓球运动员不需要懂物理也能打出完美的弧圈球——他的神经网络（大脑 + 肌肉）已经内化了物理规律。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>这七节课要回答的问题</h2>
+
+<p>既然 LLM 的核心任务已经明确了（预测下一个词），接下来的 6 节课就是把这个任务拆成技术细节：</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">L2 数据准备</div><div class="sub">文本→Token→训练样本</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">L3 词嵌入</div><div class="sub">Token ID→语义向量</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">L4 注意力</div><div class="sub">词语之间互相"看"</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">L5 Transformer Block</div><div class="sub">一层完整处理</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">L6 训练循环</div><div class="sub">模型怎么学</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">L7 组装与生成</div><div class="sub">拼好 → 产出文本</div></div>
+</div>
+
+<p>每一课只讲一个概念。学完第 7 课，你会知道一个 LLM 从数据到生成文本的完整原理。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>延伸：LLM 的完整生命周期（选读）</h2>
+
+<p>本课聚焦在「预测下一个词」这个核心任务上。但一个商业可用的 LLM（比如 ChatGPT、文心一言），从零到成品还要经历更多阶段。这里简要列出，建立一个「课程地图」——知道我们现在在学的是哪一块：</p>
+
+<table>
+  <tr><th>阶段</th><th>做什么</th><th>我们的课程覆盖？</th></tr>
+  <tr>
+    <td><strong>预训练</strong></td>
+    <td>用海量文本训练「预测下一个词」的能力</td>
+    <td>✅ <strong>全部 7 课都在讲这个</strong></td>
+  </tr>
+  <tr>
+    <td><strong>微调</strong></td>
+    <td>用几千条高质量对话教模型「聊天格式」</td>
+    <td>以后拓展</td>
+  </tr>
+  <tr>
+    <td><strong>对齐</strong></td>
+    <td>用人类反馈让模型输出安全、有帮助的内容</td>
+    <td>以后拓展</td>
+  </tr>
+  <tr>
+    <td><strong>部署</strong></td>
+    <td>压缩模型 + 包装成 API 或 App</td>
+    <td>以后拓展</td>
+  </tr>
+</table>
+
+<p><strong>预训练是最核心、最烧钱、也最体现技术含量的阶段。</strong>这 7 节课学的就是预训练——你理解了这个，就理解了 LLM 80% 的技术本质。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 小测验</h2>
+
+<div class="quiz">
+
+<div class="quiz-question">
+  <h4>问题 1/3 — 核心任务</h4>
+  <p>LLM 的核心任务是什么？用一句话回答。</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>给定上文，预测下一个词（token）的概率分布。</strong><br>
+      换个说法：LLM 就是一个超级输入法——根据你已输入的内容，推荐接下来最可能出现的词。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 2/3 — 自监督学习</h4>
+  <p>训练 LLM 为什么不需要人工标注数据？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>因为文本自己就包含了「标准答案」。</strong>对于句子「A B C D」，训练样本自动生成为：看到「A」猜「B」、看到「A B」猜「C」、看到「A B C」猜「D」。每个位置的正确答案已经在原文中了。这叫自监督学习。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 3/3 — 理解 vs 预测</h4>
+  <p>一个只会「猜下一个词」的模型，为什么能回答问题、写代码、翻译语言？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>因为在这些任务中，「正确的下一个词」恰好就是需要理解才能选对的。</strong><br>
+      比如「法国的首都是___」，正确的下一个词就是「巴黎」。模型不需要真的「知道」地理——它只需要从训练数据中学到：在这句话后面，「巴黎」出现的概率远大于其他词。当预测准确率高到一定程度，表现出来的就是「理解」。
+    </div>
+  </details>
+</div>
+
+</div>
+
+<hr>
+
+<h2>📺 推荐观看</h2>
+
+<ul>
+  <li><strong><a href="https://www.bilibili.com/video/BV1EQtuz2EJM">B站 · 《从零构建大模型》第1章</a></strong> — 什么是 LLM，配套 Jupyter Notebook 演示。</li>
+  <li><strong><a href="https://www.bilibili.com/video/BV1fGeAz6Eie">B站 · Transformer 最强动画讲解</a></strong> — 建立对 Transformer 的直觉（后续课程会逐组件展开）。</li>
+</ul>
+
+<hr>
+
+<nav class="lesson-nav">
+  <a href="0000-03-python-basics-2.html">← Phase 0：Python 速通（下）</a>
+  <a href="0002-data-preparation.html">下一课：数据准备 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>🤖 有问题随时问 Bib。这一课建立了整个课程的核心心智模型——LLM = 预测下一个词。后面 6 节课就是把这个过程拆开来，看每一步具体怎么用数学实现。</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第0.2课 · Python 速通（上）— 变量、列表、循环</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  /* Python sandbox */
+  .py-sandbox {
+    margin: 1.25rem 0;
+    border: 2px solid var(--rule);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #1a1a1a;
+  }
+  .py-sandbox .titlebar {
+    background: #333;
+    padding: 0.35rem 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .py-sandbox .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .py-sandbox .titlebar .dot.r { background: #ff5f56; }
+  .py-sandbox .titlebar .dot.y { background: #ffbd2e; }
+  .py-sandbox .titlebar .dot.g { background: #27c93f; }
+  .py-sandbox .titlebar .tname { color: #aaa; font-size: 0.7rem; margin-left: 0.5rem; font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif; }
+  .py-sandbox .editor-row {
+    display: flex;
+    gap: 0;
+  }
+  .py-sandbox textarea {
+    flex: 1;
+    min-height: 100px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    padding: 0.6rem 0.8rem;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    resize: vertical;
+    outline: none;
+    tab-size: 4;
+  }
+  .py-sandbox .output-area {
+    background: #111;
+    color: #8f8;
+    padding: 0.5rem 0.8rem;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.75rem;
+    min-height: 36px;
+    max-height: 160px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+  .py-sandbox .output-area.err { color: #f66; }
+  .py-sandbox .toolbar {
+    display: flex;
+    gap: 0.3rem;
+    padding: 0.4rem 0.6rem;
+    background: #252525;
+    border-top: 1px solid #333;
+  }
+  .py-sandbox .toolbar button {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #333;
+    color: #ccc;
+    cursor: pointer;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif;
+  }
+  .py-sandbox .toolbar button.run { background: #2a6; border-color: #2a6; color: #fff; }
+  .py-sandbox .toolbar button.run:hover { background: #3b7; }
+  .py-sandbox .toolbar button:hover { background: #444; }
+  .py-sandbox .toolbar button.reset { margin-left: auto; }
+
+  @media (max-width: 640px) {
+    .py-sandbox .editor-row { flex-direction: column; }
+  }
+
+  .quiz { margin: 2rem 0; }
+  .quiz-question { margin: 1.5rem 0; padding: 1rem 1.25rem; border: 1px solid var(--rule); border-radius: 8px; }
+  .quiz-question h4 { margin: 0 0 0.75rem; font-size: 1rem; }
+  .quiz-question details { margin-top: 0.75rem; }
+  .quiz-question summary { cursor: pointer; font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif; font-size: 0.85rem; color: var(--accent); font-weight: 500; user-select: none; }
+  .quiz-question .answer { margin-top: 0.6rem; padding: 0.75rem 1rem; background: var(--callout-bg); border-radius: 6px; font-size: 0.9rem; }
+
+  .step-num {
+    display: inline-block;
+    width: 1.8rem; height: 1.8rem;
+    line-height: 1.8rem;
+    text-align: center;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-right: 0.4rem;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🐍 第0.2课 · Python 速通（上）— 变量、列表、循环、判断</h1>
+
+<p style="font-size:1.05rem;color:var(--muted);">本课教你「刚好够用」的 Python 语法——不要求成为程序员，只要求<strong>能看懂后续课程的代码</strong>。四个概念：变量 → 列表 → 循环 → 判断。每个都配有可运行的代码沙盒。</p>
+
+<div class="callout">
+  <strong>🎯 本课目标</strong>
+  学完之后，你能看懂这样的代码：<br>
+  <code>for token in tokens:</code><br>
+  <code>&nbsp;&nbsp;&nbsp;&nbsp;if token == "[EOS]":</code><br>
+  <code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break</code><br>
+  这就是后续课程中最常见的代码模式。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">1</span> 变量 — 给数据起个名字</h2>
+
+<p>变量就是<strong>一个有名字的盒子</strong>，里面装着一个值。</p>
+
+<pre><code>x = 5               ← 把数字 5 放进叫 "x" 的盒子
+name = "Bob"        ← 把文字 "Bob" 放进叫 "name" 的盒子
+pi = 3.14159        ← 把小数放进去</code></pre>
+
+<p>Python 里的 <code>=</code>（等号）不是「等于」，而是<strong>「赋值」</strong>——把右边的值装进左边的盒子。</p>
+
+<p>三种最基本的「值」的类型：</p>
+
+<table>
+  <tr><th>类型</th><th>Python 里的叫法</th><th>例子</th><th>能做什么</th></tr>
+  <tr><td>整数</td><td><code>int</code></td><td><code>42</code>, <code>-7</code>, <code>0</code></td><td>加减乘除</td></tr>
+  <tr><td>小数</td><td><code>float</code></td><td><code>3.14</code>, <code>-0.5</code>, <code>1e-4</code></td><td>科学计算</td></tr>
+  <tr><td>文字串</td><td><code>str</code>（string）</td><td><code>"你好"</code>, <code>'world'</code></td><td>拼接、查找、切片</td></tr>
+</table>
+
+<div class="py-sandbox" id="sandbox1">
+  <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="tname">Python 游乐场 — 试试修改变量的值</span></div>
+  <div class="editor-row">
+    <textarea id="code1"># 变量演示：修改下面的数字和文字，点「运行」看效果
+x = 42
+name = "Bob"
+pi = 3.14159
+
+print("x =", x)
+print("name =", name)
+print("pi =", pi)
+print("x + 8 =", x + 8)
+print("name * 3 =", name * 3)    # 字符串乘以数字 = 重复</textarea>
+  </div>
+  <div class="output-area" id="output1"></div>
+  <div class="toolbar">
+    <button class="run" onclick="runCode('sandbox1')">▶ 运行 (Ctrl+Enter)</button>
+    <button class="reset" onclick="resetCode('sandbox1')">↺ 恢复初始代码</button>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>🔑 关键规则</strong>
+  Python 里变量名不用提前声明类型。写 <code>x = 42</code>，Python 自动知道 x 是整数。写 <code>x = "hello"</code>，同一个 x 又能变成字符串。这叫<strong>动态类型</strong>——类型跟着值走，不跟着变量名走。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">2</span> 列表 — 把很多东西装在一起</h2>
+
+<p>列表（List）就是一个<strong>有顺序的容器</strong>，可以装任意多个东西。</p>
+
+<pre><code>fruits = ["苹果", "香蕉", "橘子", "葡萄"]    ← 一个列表，4 个元素
+numbers = [1, 3, 5, 7, 9]                    ← 全是数字的列表
+mixed = ["Bob", 20, 3.14, True]              ← 混合类型也行</code></pre>
+
+<p>列表最常用的三个操作：</p>
+
+<table>
+  <tr><th>操作</th><th>代码</th><th>结果</th><th>说明</th></tr>
+  <tr><td>取第 N 个</td><td><code>fruits[0]</code></td><td><code>"苹果"</code></td><td><strong>从 0 开始数！</strong>第 0 个、第 1 个、第 2 个……</td></tr>
+  <tr><td>取最后 N 个</td><td><code>fruits[-1]</code></td><td><code>"葡萄"</code></td><td>-1 = 最后一个，-2 = 倒数第二个</td></tr>
+  <tr><td>切片</td><td><code>fruits[1:3]</code></td><td><code>["香蕉", "橘子"]</code></td><td>取第 1 到第 2 个（不含第 3 个）</td></tr>
+  <tr><td>查长度</td><td><code>len(fruits)</code></td><td><code>4</code></td><td>列表里有几个元素</td></tr>
+  <tr><td>追加</td><td><code>fruits.append("西瓜")</code></td><td>—</td><td>在末尾加上一个</td></tr>
+</table>
+
+<div class="py-sandbox" id="sandbox2">
+  <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="tname">Python 游乐场 — 列表操作</span></div>
+  <div class="editor-row">
+    <textarea id="code2"># 列表演示：试试修改列表内容
+tokens = ["我", "喜欢", "学习", "人工智能"]
+
+print("完整列表:", tokens)
+print("第 0 个 (tokens[0]):", tokens[0])
+print("第 2 个 (tokens[2]):", tokens[2])
+print("最后一个 (tokens[-1]):", tokens[-1])
+print("前两个 (tokens[:2]):", tokens[:2])
+print("列表长度:", len(tokens))
+
+# 追加
+tokens.append("!")
+print("追加后:", tokens)</textarea>
+  </div>
+  <div class="output-area" id="output2"></div>
+  <div class="toolbar">
+    <button class="run" onclick="runCode('sandbox2')">▶ 运行 (Ctrl+Enter)</button>
+    <button class="reset" onclick="resetCode('sandbox2')">↺ 恢复初始代码</button>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>⚠️ 初学者最容易犯的错：索引从 0 开始</strong><br>
+  <code>fruits[1]</code> 不是第一个元素，是<strong>第二个</strong>。因为计算机从 0 开始计数。<br>
+  第一个 → <code>[0]</code>，第二个 → <code>[1]</code>，第三个 → <code>[2]</code>……记住这个，以后少踩 90% 的坑。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">3</span> for 循环 — 让计算机重复做事</h2>
+
+<p>如果说变量是「盒子」，循环就是<strong>「流水线」</strong>——对列表里的每一个元素，依次做同样的事。</p>
+
+<pre><code>tokens = ["我", "喜欢", "AI"]
+
+for token in tokens:          ← 逐个取出列表里的元素
+    print(token)              ← 对每个元素执行这行（注意前面有 4 个空格缩进）
+
+# 输出：
+# 我
+# 喜欢
+# AI</code></pre>
+
+<p>拆解这个结构：</p>
+<ul>
+  <li><strong><code>for ... in ...:</code></strong> = 「对于……里的每一个……，做以下事情」</li>
+  <li>冒号后面的<strong>缩进（4 个空格或 Tab）</strong> = 「以下操作属于这个循环」</li>
+  <li>不再缩进的行 = 「循环结束了，继续往下执行」</li>
+</ul>
+
+<h3>range() — 重复 N 次</h3>
+
+<p><code>range(5)</code> 生成 0, 1, 2, 3, 4 这 5 个数字。配合 for 循环就是「重复 5 次」：</p>
+
+<pre><code>for i in range(5):           ← i 依次 = 0, 1, 2, 3, 4
+    print("第", i+1, "次")    ← i+1 让显示从 1 开始
+# 输出：第 1 次 / 第 2 次 / 第 3 次 / 第 4 次 / 第 5 次</code></pre>
+
+<div class="py-sandbox" id="sandbox3">
+  <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="tname">Python 游乐场 — for 循环</span></div>
+  <div class="editor-row">
+    <textarea id="code3"># 循环演示：试试修改列表或 range 的数字
+tokens = ["[BOS]", "我", "喜欢", "AI", "[EOS]"]
+
+print("=== 遍历列表 ===")
+for token in tokens:
+    print("当前 token:", token)
+
+print("\n=== 重复 N 次 ===")
+for i in range(3):
+    print("这是第", i + 1, "次循环")
+
+print("\n=== 循环里做计算 ===")
+total = 0
+for i in range(1, 6):      # range(1,6) = 1,2,3,4,5
+    total = total + i
+    print("加了", i, "后 total =", total)
+print("1到5的和 =", total)</textarea>
+  </div>
+  <div class="output-area" id="output3"></div>
+  <div class="toolbar">
+    <button class="run" onclick="runCode('sandbox3')">▶ 运行 (Ctrl+Enter)</button>
+    <button class="reset" onclick="resetCode('sandbox3')">↺ 恢复初始代码</button>
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">4</span> if 判断 — 让计算机做选择</h2>
+
+<p>if 语句就是「<strong>如果……就……否则……</strong>」：</p>
+
+<pre><code>score = 85
+
+if score >= 60:               ← 如果分数 ≥ 60
+    print("及格")              ← 就执行这行
+else:                         ← 否则（分数 < 60）
+    print("不及格")            ← 执行这行
+
+# 输出：及格</code></pre>
+
+<p>常用比较符号：</p>
+
+<table>
+  <tr><td><code>==</code></td><td>等于（<strong>注意是双等号！</strong>单等号是赋值）</td></tr>
+  <tr><td><code>!=</code></td><td>不等于</td></tr>
+  <tr><td><code>&gt;</code> / <code>&lt;</code></td><td>大于 / 小于</td></tr>
+  <tr><td><code>&gt;=</code> / <code>&lt;=</code></td><td>大于等于 / 小于等于</td></tr>
+  <tr><td><code>in</code></td><td>包含于（如 <code>"AI" in tokens</code>）</td></tr>
+</table>
+
+<div class="callout">
+  <strong>⚠️ 初学者最容易犯的错：== vs =</strong><br>
+  <code>x = 5</code> → 把 5 赋值给 x（「让 x 等于 5」）<br>
+  <code>x == 5</code> → 判断 x 是否等于 5（「x 等于 5 吗？」）<br>
+  <code>if x = 5:</code> ← ❌ 错误！if 后面必须用 ==
+</div>
+
+<div class="py-sandbox" id="sandbox4">
+  <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="tname">Python 游乐场 — if 判断 + 循环组合</span></div>
+  <div class="editor-row">
+    <textarea id="code4"># if 判断 + for 循环组合（后续课程最常见的代码模式）
+tokens = ["[BOS]", "我", "喜欢", "AI", "[EOS]", "[PAD]", "[PAD]"]
+
+print("=== 过滤掉特殊 token ===")
+real_tokens = []
+for token in tokens:
+    if token == "[PAD]":
+        print("  跳过 PAD")
+    elif token == "[BOS]" or token == "[EOS]":
+        print("  跳过", token)
+    else:
+        print("  保留:", token)
+        real_tokens.append(token)
+
+print("\n真正的内容:", real_tokens)</textarea>
+  </div>
+  <div class="output-area" id="output4"></div>
+  <div class="toolbar">
+    <button class="run" onclick="runCode('sandbox4')">▶ 运行 (Ctrl+Enter)</button>
+    <button class="reset" onclick="resetCode('sandbox4')">↺ 恢复初始代码</button>
+  </div>
+</div>
+
+<p style="font-size:0.8rem;color:var(--muted);">上面这个代码片段——遍历 token 列表、判断每个 token 的类型、收集符合条件的——就是后续 Phase 2 代码里最常见的模式。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>本课速查表</h2>
+
+<table>
+  <tr><th>你想做什么</th><th>代码</th></tr>
+  <tr><td>定义一个变量</td><td><code>x = 42</code></td></tr>
+  <tr><td>定义一个列表</td><td><code>data = [1, 2, 3]</code></td></tr>
+  <tr><td>取列表第 N 个</td><td><code>data[0]</code>（注意从 0 开始）</td></tr>
+  <tr><td>列表追加</td><td><code>data.append(4)</code></td></tr>
+  <tr><td>列表长度</td><td><code>len(data)</code></td></tr>
+  <tr><td>遍历列表</td><td><code>for x in data:</code></td></tr>
+  <tr><td>重复 N 次</td><td><code>for i in range(N):</code></td></tr>
+  <tr><td>判断相等</td><td><code>if x == 5:</code>（双等号！）</td></tr>
+  <tr><td>判断包含</td><td><code>if "AI" in tokens:</code></td></tr>
+</table>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 小测验</h2>
+
+<div class="quiz">
+
+<div class="quiz-question">
+  <h4>问题 1/3 — 索引</h4>
+  <p><code>data = ["A", "B", "C", "D"]</code>。请问 <code>data[1]</code> 和 <code>data[-1]</code> 分别是什么？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong><code>data[1]</code> = "B"（第二个元素）&nbsp;&nbsp;|&nbsp;&nbsp;<code>data[-1]</code> = "D"（最后一个元素）。</strong><br>
+      索引从 0 开始：0→A, 1→B, 2→C, 3→D。负数从末尾倒数：-1→D, -2→C。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 2/3 — for 循环</h4>
+  <p>下面的代码会打印几个数字？分别是多少？</p>
+  <pre><code>for i in range(3):
+    print(i)</code></pre>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>3 个数字：0, 1, 2。</strong><br>
+      <code>range(3)</code> 生成 0, 1, 2（从 0 开始，共 3 个，不包含 3）。如果要从 1 开始，用 <code>range(1, 4)</code>。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 3/3 — if 判断</h4>
+  <p>以下代码会输出什么？</p>
+  <pre><code>token = "[PAD]"
+if token == "[PAD]":
+    print("跳过")
+else:
+    print("保留")</code></pre>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>输出「跳过」。</strong><br>
+      <code>token == "[PAD]"</code> 判断 token 的值是否等于字符串 "[PAD]"。因为确实是，所以执行 if 分支。<br>
+      注意 <code>==</code>（判断）不是 <code>=</code>（赋值）。如果写成 <code>if token = "[PAD]":</code>——报错！
+    </div>
+  </details>
+</div>
+
+</div>
+
+<hr>
+
+<nav class="lesson-nav">
+  <a href="0000-01-command-line.html">← 上一课：命令行入门</a>
+  <a href="0000-03-python-basics-2.html">下一课：Python 速通（下）→</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>🤖 变量、列表、循环、判断——这四种结构覆盖了后续课程 90% 的代码。下一课学剩下的三个：字典、函数、import。然后把所有知识串起来，读一段真实的 LLM 训练代码。有问题随时问 Bib。</p>
+</footer>
+
+<!-- ============================================================ -->
+<!-- Python Sandbox Engine — shared interpreter + sandbox UI -->
+<!-- ============================================================ -->
+<script src="../assets/python-interpreter.js"></script>
+<script>
+// The runPython() function is now loaded from assets/python-interpreter.js
+
+// Sandbox UI management
+const sandboxDefaults = {};
+
+function initSandbox(id) {
+  const ta = document.getElementById('code' + id.replace('sandbox', ''));
+  if (ta && !sandboxDefaults[id]) {
+    sandboxDefaults[id] = ta.value;
+  }
+  // Ctrl+Enter to run
+  if (ta) {
+    ta.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        runCode(id);
+      }
+      // Tab key
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = this.selectionStart;
+        this.value = this.value.slice(0, start) + '    ' + this.value.slice(this.selectionEnd);
+        this.selectionStart = this.selectionEnd = start + 4;
+      }
+    });
+  }
+}
+
+function runCode(id) {
+  const num = id.replace('sandbox', '');
+  const code = document.getElementById('code' + num).value;
+  const outputEl = document.getElementById('output' + num);
+
+  const result = runPython(code);
+  outputEl.textContent = result.output.join('\n');
+  outputEl.className = 'output-area';
+}
+
+function resetCode(id) {
+  const num = id.replace('sandbox', '');
+  const ta = document.getElementById('code' + num);
+  if (sandboxDefaults[id]) {
+    ta.value = sandboxDefaults[id];
+  }
+  const outputEl = document.getElementById('output' + num);
+  outputEl.textContent = '';
+}
+
+// Initialize all sandboxes
+document.addEventListener('DOMContentLoaded', function() {
+  const sandboxes = document.querySelectorAll('.py-sandbox');
+  sandboxes.forEach(sb => {
+    initSandbox(sb.id);
+    // Auto-run on load
+    runCode(sb.id);
+  });
+});
+</script>
+
+</body>
+</html>

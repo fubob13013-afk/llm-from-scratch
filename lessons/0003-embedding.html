@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第3课 · 词嵌入与位置编码 —— 给词语赋予「坐标」</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .lookup-table {
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+    margin: 1.5rem 0;
+    flex-wrap: wrap;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.8rem;
+  }
+  .lookup-left {
+    flex: 0 0 auto;
+    text-align: center;
+  }
+  .lookup-left .id-box {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .lookup-arrow-big {
+    font-size: 2rem;
+    color: var(--faint);
+    flex: 0 0 auto;
+  }
+  .lookup-right {
+    flex: 1 1 260px;
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+  }
+  .lookup-right .vec-row {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+    margin: 0.15rem 0;
+  }
+  .lookup-right .vec-val {
+    display: inline-block;
+    width: 3.2rem;
+    text-align: right;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+  .lookup-right .vec-bar {
+    height: 8px;
+    border-radius: 4px;
+    min-width: 2px;
+  }
+
+  .color-analogy {
+    display: flex;
+    gap: 1rem;
+    margin: 1.25rem 0;
+    flex-wrap: wrap;
+  }
+  .color-card {
+    flex: 1 1 140px;
+    text-align: center;
+    padding: 1rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--rule);
+  }
+  .color-swatch {
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    margin: 0 auto 0.5rem;
+    border: 2px solid var(--rule);
+  }
+  .color-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  }
+  .color-rgb {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: "JetBrains Mono", Consolas, monospace;
+    margin-top: 0.2rem;
+  }
+
+  .dim-compare {
+    display: flex;
+    gap: 1rem;
+    margin: 1.25rem 0;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .dim-bar-wrap {
+    flex: 1 1 100px;
+    text-align: center;
+  }
+  .dim-bar {
+    margin: 0 auto;
+    border-radius: 6px 6px 0 0;
+    background: linear-gradient(to top, var(--accent), #e88);
+    min-width: 40px;
+    transition: height 0.4s;
+  }
+  .dim-label {
+    font-size: 0.75rem;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    margin-top: 0.4rem;
+    font-weight: 600;
+  }
+  .dim-desc {
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+  }
+
+  /* Position encoding heatmap styles */
+  .experiment {
+    margin: 1.5rem 0;
+    border: 2px solid var(--rule);
+    border-radius: 10px;
+    padding: 1.25rem;
+    background: var(--code-bg);
+  }
+  .experiment h4 { margin: 0 0 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; }
+  .experiment .desc { font-size: 0.82rem; color: var(--muted); margin-bottom: 1rem; }
+  .exp-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+  .exp-controls { flex: 0 0 240px; display: flex; flex-direction: column; gap: 0.6rem; }
+  .exp-controls label { font-size: 0.78rem; font-weight: 600; font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif; }
+  .exp-controls input[type=range] { width: 100%; accent-color: var(--accent); }
+  .exp-canvas { flex: 1 1 340px; min-width: 300px; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg); }
+  .exp-stats { font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; font-size: 0.75rem; line-height: 1.8; color: var(--muted); }
+  .exp-stats span { color: var(--text); font-weight: 600; }
+  @media (max-width: 640px) { .exp-row { flex-direction: column; } .exp-controls { flex: 0 0 auto; width: 100%; } }
+
+  .quiz { margin: 2rem 0; }
+  .quiz-question {
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+  }
+  .quiz-question h4 { margin: 0 0 0.75rem; font-size: 1rem; }
+  .quiz-question details { margin-top: 0.75rem; }
+  .quiz-question summary {
+    cursor: pointer;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.85rem;
+    color: var(--accent);
+    font-weight: 500;
+    user-select: none;
+  }
+  .quiz-question .answer {
+    margin-top: 0.6rem;
+    padding: 0.75rem 1rem;
+    background: var(--callout-bg);
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+
+  .step-num {
+    display: inline-block;
+    width: 1.8rem; height: 1.8rem;
+    line-height: 1.8rem;
+    text-align: center;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-right: 0.4rem;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🧭 第3课 · 词嵌入与位置编码 —— 给词语赋予「坐标」</h1>
+<p style="font-size:1.1rem;color:var(--muted);">第 2 课把文本变成了 Token ID（整数序列）。但整数只是编号，不携带语义。本课解决两个问题：<strong>怎么让数字代表含义？怎么让模型知道词序？</strong></p>
+
+<div class="callout">
+  <strong>⚠️ 本课前提</strong>
+  需要知道什么是 Token ID（第 2 课）。回顾：经过分词和词表映射后，「我喜欢人工智能」变成了类似 <code>[15, 42, 38, 89, 91]</code> 这样的整数序列。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>第一部分：词嵌入（Embedding）—— 从整数到语义坐标</h2>
+
+<h3>问题：Token ID 有什么致命缺陷？</h3>
+
+<p>假设词表里：</p>
+
+<pre><code>"国王"  → Token ID = 15
+"王后"  → Token ID = 382
+"苹果"  → Token ID = 16</code></pre>
+
+<p>从数字上看，<strong>「国王」（15）和「苹果」（16）只差 1——比「国王」和「王后」（差 367）「更接近」</strong>。但语义上显然「国王」和「王后」更相关。</p>
+
+<p>Token ID 只是一个<strong>编号</strong>，不携带任何<strong>含义</strong>。计算机需要的是：<strong>把每个词表示成一个能体现语义的「位置」</strong>——含义相近的词，位置也相近。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>什么是向量？—— 30 秒速通</h2>
+
+<p>你可能听过「向量」这个词但觉得抽象。其实它就是<strong>一组数字，用来描述一个点在空间中的位置</strong>。</p>
+
+<div class="callout">
+  <strong>🔑 颜色 RGB 类比（你肯定懂这个）</strong><br>
+  你在 PS 里调过色，知道每个颜色都可以用 <strong>(R, G, B)</strong> 三个数字表示：
+
+  <div class="color-analogy">
+    <div class="color-card">
+      <div class="color-swatch" style="background:#e63946;"></div>
+      <div class="color-label">红色</div>
+      <div class="color-rgb">(230, 57, 70)</div>
+    </div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:#e67346;"></div>
+      <div class="color-label">橙红色</div>
+      <div class="color-rgb">(230, 115, 70)</div>
+    </div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:#457b9d;"></div>
+      <div class="color-label">蓝色</div>
+      <div class="color-rgb">(69, 123, 157)</div>
+    </div>
+  </div>
+
+  <p>注意：<strong>红色和橙红色的 RGB 值很接近</strong>（只有 G 值差了一点），而它们和蓝色的值差得很远。这恰好就是 Embedding 要做的事——<strong>相似的东西，坐标也相似</strong>。</p>
+</div>
+
+<p>一个 RGB 颜色是一个 <strong>3 维向量</strong>。词嵌入做的事完全一样，只是维度更多：不是 3 维，而是 <strong>768 维、2048 维甚至 4096 维</strong>。</p>
+
+<p>为什么需要这么多维？因为颜色的差异只需要 3 个维度就能描述，但<strong>人类语言的语义差异极其复杂</strong>——性别、时态、感情色彩、正式程度、领域……需要几百上千个维度来刻画。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">1</span> Embedding 层 = 一个巨大的查表字典</h2>
+
+<p>从工程实现来看，Embedding 层简单到让你惊讶：它就是一个<strong>巨大的二维表格</strong>。</p>
+
+<table>
+  <tr><th>Token ID</th><th>维度 0</th><th>维度 1</th><th>维度 2</th><th>维度 3</th><th>……</th><th>维度 767</th></tr>
+  <tr>
+    <td><strong>15（"国王"）</strong></td>
+    <td>0.23</td><td>-0.51</td><td>0.08</td><td>0.91</td><td>……</td><td>-0.33</td>
+  </tr>
+  <tr>
+    <td><strong>382（"王后"）</strong></td>
+    <td>0.19</td><td>-0.47</td><td>0.11</td><td>0.88</td><td>……</td><td>-0.29</td>
+  </tr>
+  <tr>
+    <td><strong>16（"苹果"）</strong></td>
+    <td>-0.72</td><td>0.35</td><td>-0.61</td><td>0.04</td><td>……</td><td>0.55</td>
+  </tr>
+  <tr style="color:var(--faint);"><td>……</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr>
+    <td><strong>50000</strong></td>
+    <td>0.41</td><td>0.12</td><td>-0.77</td><td>-0.03</td><td>……</td><td>0.18</td>
+  </tr>
+</table>
+
+<ul>
+  <li><strong>行数</strong> = 词表大小（通常 50,000~200,000 个 token）</li>
+  <li><strong>列数</strong> = 嵌入维度（通常 768~4096）</li>
+  <li><strong>每行</strong> = 一个 token 的<strong>嵌入向量</strong>（embedding vector），就是这个 token 的「语义坐标」</li>
+</ul>
+
+<p>模型拿到 Token ID = 15 后，做的事极其简单：<strong>去这个表格的第 15 行，把那一整行数字取出来</strong>。这就是「查表」（lookup）。</p>
+
+<div class="lookup-table">
+  <div class="lookup-left">
+    <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.3rem;">输入</div>
+    <div class="id-box">15</div>
+    <div style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;">Token ID</div>
+  </div>
+  <div class="lookup-arrow-big">→ 查表 →</div>
+  <div class="lookup-right">
+    <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.4rem;">输出：768 维向量（"国王"的语义坐标）</div>
+    <div class="vec-row">
+      <span style="font-size:0.6rem;width:1.2rem;color:var(--muted);">d₀</span>
+      <span class="vec-val">0.23</span>
+      <span class="vec-bar" style="width:46px;background:#e66;"></span>
+    </div>
+    <div class="vec-row">
+      <span style="font-size:0.6rem;width:1.2rem;color:var(--muted);">d₁</span>
+      <span class="vec-val">-0.51</span>
+      <span class="vec-bar" style="width:102px;background:#6b6;margin-left:0;"></span>
+    </div>
+    <div class="vec-row">
+      <span style="font-size:0.6rem;width:1.2rem;color:var(--muted);">d₂</span>
+      <span class="vec-val">0.08</span>
+      <span class="vec-bar" style="width:16px;background:#66b;"></span>
+    </div>
+    <div style="font-size:0.6rem;color:var(--faint);margin-top:0.2rem;">……（共 768 个数字）</div>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>🔑 这表格里的数字从哪来？</strong>
+  一开始是<strong>随机填的</strong>（就像随机撒了一把豆子）。训练的过程中，模型不断调整这些数字，让语义相近的词慢慢「飘」到彼此附近。训练结束时，「国王」和「王后」的向量自然就很接近了。这些数字<strong>不是人工设定的，是模型自己学出来的</strong>。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">2</span> 为什么这能行？—— 分布式语义假说</h2>
+
+<p>语言学里有一个著名的观察（不是假说，是大量实验验证过的规律）：</p>
+
+<blockquote>
+<strong>「一个词的含义，由它身边的词决定。」</strong><br>
+<span style="font-size:0.85rem;">— John Rupert Firth, 1957</span>
+</blockquote>
+
+<p>什么意思？</p>
+
+<pre><code>我喝了一杯___。    ← 空格里大概率是「水」「茶」「咖啡」「牛奶」……
+我吃了一个___。    ← 空格里大概率是「苹果」「面包」「鸡蛋」……</code></pre>
+
+<p>「水」「茶」「咖啡」经常出现在相同的上下文里（「喝」的后面），所以它们的嵌入向量会很接近。「苹果」「水」虽然都可以出现在空格里，但一个搭配「吃」一个搭配「喝」——它们的向量就会远一些。</p>
+
+<p>模型在训练时，<strong>并不是被显式告知「国王和王后有关」</strong>。它只是在几万亿次「看到前面猜后面」的训练中，发现了：出现在相似上下文里的词，调整它们的向量让它们靠近，能降低预测误差。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">3</span> 嵌入维度：越大越好吗？</h2>
+
+<div class="dim-compare">
+  <div class="dim-bar-wrap">
+    <div class="dim-bar" style="height:30px;"></div>
+    <div class="dim-label">RGB 颜色</div>
+    <div class="dim-desc">3 维<br>描述颜色够了</div>
+  </div>
+  <div class="dim-bar-wrap">
+    <div class="dim-bar" style="height:70px;"></div>
+    <div class="dim-label">word2vec</div>
+    <div class="dim-desc">300 维<br>2013 年的经典</div>
+  </div>
+  <div class="dim-bar-wrap">
+    <div class="dim-bar" style="height:130px;"></div>
+    <div class="dim-label">GPT-2</div>
+    <div class="dim-desc">768 维<br>小但能打</div>
+  </div>
+  <div class="dim-bar-wrap">
+    <div class="dim-bar" style="height:190px;"></div>
+    <div class="dim-label">GPT-3</div>
+    <div class="dim-desc">12288 维<br>信息密度极高</div>
+  </div>
+</div>
+
+<table>
+  <tr><th>维度</th><th>好处</th><th>代价</th></tr>
+  <tr>
+    <td>低（128~300）</td>
+    <td>算得快，占内存少</td>
+    <td>每个词塞不进足够信息，语义表达粗糙</td>
+  </tr>
+  <tr>
+    <td>中（768~2048）</td>
+    <td>✅ 甜点区：足够细腻 + 可以接受的计算量</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td>高（4096~12288）</td>
+    <td>语义极其细腻，罕见词也能精准定位</td>
+    <td>计算量暴增 + 可能「记太多」泛化变差</td>
+  </tr>
+</table>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>第二部分：位置编码（Positional Encoding）—— 让模型知道词序</h2>
+
+<h3>Embedding 有一个致命缺陷</h3>
+
+<p>Embedding 只给每个词一个固定坐标——「国王」不管出现在句子第 1 位还是第 5 位，查出来的向量都是<strong>完全一样的</strong>。</p>
+
+<p>但「狗追猫」和「猫追狗」——词完全相同，顺序不同，意思天差地别。只用词嵌入（不加位置信息），模型看到的两个句子是<strong>一模一样的输入</strong>，无法区分谁追谁。</p>
+
+<p>解决方案：在词嵌入的基础上，再叠加一个只和位置有关的向量——<strong>位置编码（Positional Encoding）</strong>。</p>
+
+<pre><code>最终输入向量 = 词嵌入向量（"苹果"的语义）+ 位置编码向量（"第 4 个位置"的指纹）</code></pre>
+
+<p>这样同一个词在不同位置会有不同的最终表示。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>GPT 用的方法：正弦位置编码</h2>
+
+<p>对于位置 pos 和维度 i（0 ≤ i &lt; 768）：</p>
+
+<ul>
+  <li><strong>偶数维度</strong>（0, 2, 4, …）：<code>sin(pos / 10000<sup>i/768</sup>)</code></li>
+  <li><strong>奇数维度</strong>（1, 3, 5, …）：<code>cos(pos / 10000<sup>(i-1)/768</sup>)</code></li>
+</ul>
+
+<p>这个公式的直觉：</p>
+<ul>
+  <li>i 越小（靠前的维度）→ 分母接近 1 → sin/cos 的<strong>波长很短</strong> → 相邻位置的编码变化很快 → 捕捉<strong>局部</strong>位置差异</li>
+  <li>i 越大（靠后的维度）→ 分母很大 → sin/cos 的<strong>波长很长</strong> → 编码变化缓慢 → 捕捉<strong>远距离</strong>位置关系</li>
+</ul>
+
+<p>不同频率的 sin/cos 波叠加在一起，每个位置拥有一个<strong>独一无二的向量指纹</strong>。相邻位置的指纹很相似（帮助模型学到局部模式），远距离位置的指纹差异很大。</p>
+
+<h3>可学习 vs 正弦位置编码</h3>
+
+<table>
+  <tr><th>方案</th><th>做法</th><th>优点</th><th>缺点</th></tr>
+  <tr>
+    <td><strong>可学习位置编码</strong></td>
+    <td>给每个位置随机初始化一个向量，训练时调整</td>
+    <td>灵活，GPT-2 及之后多用此方案</td>
+    <td>只能处理训练时见过的位置长度</td>
+  </tr>
+  <tr>
+    <td><strong>正弦位置编码</strong></td>
+    <td>用 sin/cos 公式计算，不参与训练</td>
+    <td>可泛化到任意长度；相邻位置天然相似</td>
+    <td>固定规则，不如可学习的灵活</td>
+  </tr>
+</table>
+
+<p>原始 Transformer 论文和 GPT-1 用正弦编码。GPT-2 及之后大多改用可学习位置编码。但<strong>核心思想完全一样</strong>：给每个位置一个独一无二的向量，加到词嵌入上。</p>
+
+<!-- ========== 交互实验：位置编码热力图 ========== -->
+<div class="experiment" id="exp-pe">
+  <h4>🧪 交互实验：位置编码指纹 —— 看到每个位置的「条形码」</h4>
+  <p class="desc">热力图：每一行是一个位置（pos 0~31）的位置编码，每一列是一个维度（0~63，截取前 64 维）。颜色表示数值（蓝= -1，白= 0，红= +1）。拖动滑块选择两个位置对比——相邻位置的「条纹」几乎相同，远距离位置完全不同。</p>
+  <div class="exp-row">
+    <div class="exp-controls">
+      <label>对比位置 A：<span id="pe-posa-display">0</span></label>
+      <input type="range" id="pe-posa" min="0" max="31" step="1" value="0">
+      <label>对比位置 B：<span id="pe-posb-display">15</span></label>
+      <input type="range" id="pe-posb" min="0" max="31" step="1" value="15">
+      <div class="exp-stats">
+        距离：<span id="pe-dist">15</span> 个位置<br>
+        余弦相似度：<span id="pe-sim">0.32</span>
+      </div>
+      <p style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;">提示：把 A 和 B 设成相邻位置（如 5 和 6），再看相似度。再试 0 和 31。</p>
+    </div>
+    <canvas class="exp-canvas" id="pe-canvas" width="420" height="340"></canvas>
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>完整数据流：从原始文本到模型输入</h2>
+
+<p>把第 2 课和本课串起来，数据在进入 Transformer 之前的完整流程：</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">原始文本</div><div class="sub">"我喜欢AI"</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">分词</div><div class="sub">BPE</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">Token ID</div><div class="sub">[15, 42, 89]</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">Embedding</div><div class="sub">三个 768 维语义向量</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">+ 位置编码</div><div class="sub">叠加位置指纹</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">送入 Transformer</div><div class="sub">开始计算注意力</div></div>
+</div>
+
+<p>到这一步，文字已经变成了<strong>携带语义和位置信息的数字矩阵</strong>——Transformer 终于可以开始「读」它们了。下一课讲 Transformer 最核心的机制：注意力。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 小测验</h2>
+
+<div class="quiz">
+
+<div class="quiz-question">
+  <h4>问题 1/3 — 查表</h4>
+  <p>GPT-2 的 Embedding 表格有多少行？多少列？（给出数量级即可）</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>约 50,000 行 × 768 列。</strong><br>
+      行数 = 词表大小（GPT-2 词表约 50,257 个 token），<br>
+      列数 = 嵌入维度（GPT-2 用 768）。<br>
+      总数约 3800 万个数字——这些都是模型要学的参数。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 2/3 — 位置的作用</h4>
+  <p>「狗追猫」和「猫追狗」——分词后 token 完全相同，只是顺序不同。只用词嵌入（不加位置编码）的话，模型能看到区别吗？为什么？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>不能。</strong>只用词嵌入的话，「狗」无论在第 1 位还是第 3 位，查出来的向量一模一样。两个句子送入 Transformer 的矩阵完全相同，模型无法区分谁追谁。<br><br>
+      这就是为什么必须加<strong>位置编码</strong>——同一个词在不同位置，最终输入向量不同。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 3/3 — 语义坐标的来历</h4>
+  <p>训练好的 Embedding 中，「猫」和「狗」的向量距离近，还是「猫」和「汽车」的向量距离近？这些坐标是人为设定的吗？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>「猫」和「狗」更近。这些坐标不是人为设定的，是模型自己学出来的。</strong><br>
+      因为在训练数据中，「猫」和「狗」频繁出现在相似的上下文里（"我养了一只___"），模型在训练中把它们的向量调到了彼此附近。「汽车」出现在完全不同的上下文里，向量自然离得远。
+    </div>
+  </details>
+</div>
+
+</div>
+
+<hr>
+
+<h2>📺 推荐观看</h2>
+
+<ul>
+  <li><strong><a href="https://www.bilibili.com/video/BV1EQtuz2EJM">B站 · 《从零构建大模型》第 2 章 Embedding 部分</a></strong> — 看代码怎么定义 <code>nn.Embedding(vocab_size, emb_dim)</code> 以及怎么查表。</li>
+  <li><strong><a href="https://www.bilibili.com/video/BV1Di4y1c7Zm">B站 · 3Blue1Brown 位置编码可视化</a></strong> — 动画展示 sin/cos 如何为每个位置创建独一无二的编码。</li>
+  <li><strong><a href="https://www.bilibili.com/video/BV1gM4y1V7Zt">B站 · 词嵌入原理（word2vec 可视化版）</a></strong> — 10 分钟，可视化展示词向量空间里的语义运算。</li>
+</ul>
+
+<hr>
+
+<nav class="lesson-nav">
+  <a href="0002-data-preparation.html">← 上一课：数据准备</a>
+  <a href="0004-attention.html">下一课：注意力机制（Attention）→</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>🤖 本课完成了从「数字编号」到「语义坐标」的跃迁。Embedding 让每个 token 拥有了含义，位置编码让模型知道了词序。现在模型的输入是一个携带语义+位置信息的数字矩阵——下一课讲 Transformer 怎么在这个矩阵上做最核心的运算：注意力。有问题随时问 Bib。</p>
+</footer>
+
+<!-- ============================================================ -->
+<!-- Position Encoding Heatmap Script -->
+<!-- ============================================================ -->
+<script>
+(function() {
+  const canvas = document.getElementById('pe-canvas');
+  const ctx = canvas.getContext('2d');
+  const D = 64;
+  const N = 32;
+
+  function pe(pos, dim) {
+    const i = Math.floor(dim / 2);
+    const freq = 1.0 / Math.pow(10000, (2 * i) / 768);
+    const val = pos * freq;
+    return dim % 2 === 0 ? Math.sin(val) : Math.cos(val);
+  }
+
+  const values = [];
+  for (let p = 0; p < N; p++) {
+    const row = [];
+    for (let d = 0; d < D; d++) {
+      row.push(pe(p, d));
+    }
+    values.push(row);
+  }
+
+  function draw() {
+    const Wc = canvas.width, Hc = canvas.height;
+    const pad = { top: 35, right: 15, bottom: 35, left: 50 };
+    const pw = Wc - pad.left - pad.right;
+    const ph = Hc - pad.top - pad.bottom;
+    const cellW = pw / D;
+    const cellH = ph / N;
+
+    ctx.clearRect(0, 0, Wc, Hc);
+
+    for (let p = 0; p < N; p++) {
+      for (let d = 0; d < D; d++) {
+        const v = values[p][d];
+        const x = pad.left + d * cellW;
+        const y = pad.top + p * cellH;
+
+        let r, g, b;
+        if (v >= 0) {
+          r = Math.floor(220 * v + 35);
+          g = Math.floor(35 * (1 - v) + 200 * (1 - v));
+          b = Math.floor(35 * (1 - v) + 200 * (1 - v));
+        } else {
+          const av = -v;
+          r = Math.floor(35 * (1 - av) + 200 * (1 - av));
+          g = Math.floor(35 * (1 - av) + 200 * (1 - av));
+          b = Math.floor(220 * av + 35);
+        }
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
+      }
+    }
+
+    const posA = parseInt(document.getElementById('pe-posa').value);
+    const posB = parseInt(document.getElementById('pe-posb').value);
+
+    [posA, posB].forEach((pos, idx) => {
+      const y = pad.top + pos * cellH;
+      ctx.strokeStyle = idx === 0 ? '#000' : '#c44';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(pad.left, y, pw, cellH);
+      ctx.fillStyle = idx === 0 ? '#000' : '#c44';
+      ctx.font = 'bold 11px "JetBrains Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('pos ' + pos + (idx === 0 ? ' A' : ' B'), pad.left - 4, y + cellH / 2 + 4);
+    });
+
+    ctx.fillStyle = '#888'; ctx.font = '10px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('维度 → (前 64 / 768)', Wc / 2, Hc - 4);
+    ctx.save();
+    ctx.translate(10, Hc / 2 + 20);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('位置 → (0~31)', 0, 0);
+    ctx.restore();
+
+    const vecA = values[posA], vecB = values[posB];
+    let dot = 0, normA = 0, normB = 0;
+    for (let i = 0; i < D; i++) {
+      dot += vecA[i] * vecB[i];
+      normA += vecA[i] * vecA[i];
+      normB += vecB[i] * vecB[i];
+    }
+    const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-8);
+
+    document.getElementById('pe-posa-display').textContent = posA;
+    document.getElementById('pe-posb-display').textContent = posB;
+    document.getElementById('pe-dist').textContent = Math.abs(posB - posA);
+    document.getElementById('pe-sim').textContent = sim.toFixed(3);
+  }
+
+  document.getElementById('pe-posa').addEventListener('input', draw);
+  document.getElementById('pe-posb').addEventListener('input', draw);
+  draw();
+})();
+</script>
+
+</body>
+</html>

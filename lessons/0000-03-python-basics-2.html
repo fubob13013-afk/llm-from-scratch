@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第0.3课 · Python 速通（下）— 字典、函数、import</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .py-sandbox {
+    margin: 1.25rem 0;
+    border: 2px solid var(--rule);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #1a1a1a;
+  }
+  .py-sandbox .titlebar {
+    background: #333;
+    padding: 0.35rem 0.8rem;
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .py-sandbox .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .py-sandbox .titlebar .dot.r { background: #ff5f56; }
+  .py-sandbox .titlebar .dot.y { background: #ffbd2e; }
+  .py-sandbox .titlebar .dot.g { background: #27c93f; }
+  .py-sandbox .titlebar .tname { color: #aaa; font-size: 0.7rem; margin-left: 0.5rem; font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif; }
+  .py-sandbox textarea {
+    flex: 1; min-height: 100px; background: #1e1e1e; color: #d4d4d4;
+    border: none; padding: 0.6rem 0.8rem;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.78rem; line-height: 1.6; resize: vertical; outline: none; tab-size: 4;
+  }
+  .py-sandbox .output-area {
+    background: #111; color: #8f8; padding: 0.5rem 0.8rem;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.75rem; min-height: 36px; max-height: 160px;
+    overflow-y: auto; white-space: pre-wrap; word-break: break-all; line-height: 1.5;
+  }
+  .py-sandbox .output-area.err { color: #f66; }
+  .py-sandbox .toolbar {
+    display: flex; gap: 0.3rem; padding: 0.4rem 0.6rem;
+    background: #252525; border-top: 1px solid #333;
+  }
+  .py-sandbox .toolbar button {
+    padding: 0.25rem 0.6rem; font-size: 0.72rem; font-weight: 600;
+    border: 1px solid #555; border-radius: 4px;
+    background: #333; color: #ccc; cursor: pointer;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif;
+  }
+  .py-sandbox .toolbar button.run { background: #2a6; border-color: #2a6; color: #fff; }
+  .py-sandbox .toolbar button.run:hover { background: #3b7; }
+  .py-sandbox .toolbar button:hover { background: #444; }
+  .py-sandbox .toolbar button.reset { margin-left: auto; }
+
+  .quiz { margin: 2rem 0; }
+  .quiz-question { margin: 1.5rem 0; padding: 1rem 1.25rem; border: 1px solid var(--rule); border-radius: 8px; }
+  .quiz-question h4 { margin: 0 0 0.75rem; font-size: 1rem; }
+  .quiz-question details { margin-top: 0.75rem; }
+  .quiz-question summary { cursor: pointer; font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif; font-size: 0.85rem; color: var(--accent); font-weight: 500; user-select: none; }
+  .quiz-question .answer { margin-top: 0.6rem; padding: 0.75rem 1rem; background: var(--callout-bg); border-radius: 6px; font-size: 0.9rem; }
+
+  .step-num {
+    display: inline-block; width: 1.8rem; height: 1.8rem;
+    line-height: 1.8rem; text-align: center;
+    background: var(--accent); color: #fff;
+    border-radius: 50%; font-size: 0.85rem; font-weight: 700;
+    margin-right: 0.4rem;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  }
+
+  .code-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1.25rem 0;
+  }
+  @media (max-width: 640px) { .code-compare { grid-template-columns: 1fr; } }
+  .code-compare .code-block {
+    border: 2px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .code-compare .code-block h4 {
+    margin: 0; padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+    background: var(--code-bg);
+  }
+  .code-compare .code-block pre {
+    margin: 0; border-radius: 0;
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🐍 第0.3课 · Python 速通（下）— 字典、函数、import</h1>
+
+<p style="font-size:1.05rem;color:var(--muted);">上节课学了变量、列表、循环、判断。本课补最后三块拼图：<strong>字典、函数、import</strong>。学完之后，你能看懂后续所有课程代码。</p>
+
+<div class="callout">
+  <strong>🎯 本课目标</strong>
+  学完之后，你能看懂后续课程中最「复杂」的代码模式：<br>
+  <code>model = GPTModel(config)</code> ← 函数调用<br>
+  <code>config = {"vocab_size": 50000, "emb_dim": 768}</code> ← 字典<br>
+  <code>import torch; torch.nn.Linear(768, 768)</code> ← import
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">1</span> 字典 — 给每个值起个名字</h2>
+
+<p>列表用<strong>数字</strong>索引（第 0 个、第 1 个……）。字典（dict）用<strong>名字</strong>索引：</p>
+
+<pre><code># 列表：按位置取
+info = ["Bob", 20, "清华美院"]
+name = info[0]     # 要记住位置 0 是名字……
+
+# 字典：按名字取
+info = {"name": "Bob", "age": 20, "school": "清华美院"}
+name = info["name"]   # 一目了然</code></pre>
+
+<p>字典的语法：<code>{"键": 值, "键": 值, ...}</code>。键（key）通常是字符串，值（value）可以是任何类型。</p>
+
+<div class="py-sandbox" id="sandbox1">
+  <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="tname">Python 游乐场 — 字典</span></div>
+  <div class="editor-row">
+    <textarea id="code1"># 字典演示 — 后续课程里的模型配置就是这样写的
+config = {
+    "vocab_size": 50257,     # 词表大小
+    "emb_dim": 768,          # 嵌入维度
+    "n_layers": 12,          # Transformer 层数
+    "n_heads": 12,           # 注意力头数
+    "dropout": 0.1           # Dropout 概率
+}
+
+print("词表大小:", config["vocab_size"])
+print("嵌入维度:", config["emb_dim"])
+
+# 遍历字典
+print("\n完整配置:")
+for key, value in config.items():
+    print("  ", key, "=", value)</textarea>
+  </div>
+  <div class="output-area" id="output1"></div>
+  <div class="toolbar">
+    <button class="run" onclick="runCode('sandbox1')">▶ 运行 (Ctrl+Enter)</button>
+    <button class="reset" onclick="resetCode('sandbox1')">↺ 恢复初始代码</button>
+  </div>
+</div>
+
+<p>这就是后续课程里的模型配置（config）——一个大字典，装满了各种参数设置。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">2</span> 函数 — 把一段代码打包</h2>
+
+<h3>为什么需要函数？</h3>
+
+<p>如果你有一段代码需要在 100 个地方用到，你会复制粘贴 100 次吗？不会——你会<strong>给它起个名字</strong>，每次用到的时候叫它的名字就行。这就是函数。</p>
+
+<div class="code-compare">
+  <div class="code-block">
+    <h4>❌ 没有函数：重复 3 次</h4>
+    <pre><code># 第 1 次
+result1 = 1 + 2 + 3 + 4 + 5
+print(result1 / 5)
+
+# 第 2 次
+result2 = 6 + 7 + 8 + 9 + 10
+print(result2 / 5)
+
+# 第 3 次
+result3 = 11 + 12 + 13 + 14 + 15
+print(result3 / 5)</code></pre>
+  </div>
+  <div class="code-block">
+    <h4>✅ 有函数：写一次，调用 3 次</h4>
+    <pre><code>def average(numbers):
+    total = 0
+    for n in numbers:
+        total = total + n
+    return total / len(numbers)
+
+print(average([1,2,3,4,5]))
+print(average([6,7,8,9,10]))
+print(average([11,12,13,14,15]))</code></pre>
+  </div>
+</div>
+
+<h3>函数的四个要素</h3>
+
+<table>
+  <tr><th>要素</th><th>代码</th><th>含义</th></tr>
+  <tr><td><strong>定义</strong></td><td><code>def 函数名(参数):</code></td><td>「我要定义一个函数，它叫这个名字，接收这些输入」</td></tr>
+  <tr><td><strong>参数</strong></td><td><code>numbers</code></td><td>函数的「输入口」——调用时把数据从这里传进去</td></tr>
+  <tr><td><strong>返回</strong></td><td><code>return 值</code></td><td>函数的「输出口」——算完的结果从这里传出去</td></tr>
+  <tr><td><strong>调用</strong></td><td><code>average([1,2,3])</code></td><td>「Hey average 函数，给你这组数据，返回结果给我」</td></tr>
+</table>
+
+<div class="py-sandbox" id="sandbox2">
+  <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="tname">Python 游乐场 — 函数</span></div>
+  <div class="editor-row">
+    <textarea id="code2"># 函数演示：定义一个「计算交叉熵损失」的简化版函数
+import math
+
+def cross_entropy_loss(prob_correct):
+    """
+    计算交叉熵损失 —— 这就是第 6 课讲的 Loss = -log(p)
+    参数 prob_correct: 模型给正确答案的概率 (0~1)
+    返回: 损失值（越小越好）
+    """
+    return -math.log(prob_correct)
+
+# 调用函数
+print("概率 0.9 → Loss =", cross_entropy_loss(0.9))
+print("概率 0.5 → Loss =", cross_entropy_loss(0.5))
+print("概率 0.1 → Loss =", cross_entropy_loss(0.1))
+print("概率 0.01 → Loss =", cross_entropy_loss(0.01))
+
+# 批量计算
+probs = [0.9, 0.7, 0.5, 0.3, 0.1]
+print("\n批量计算:")
+for p in probs:
+    print("  p =", p, "→ Loss =", round(cross_entropy_loss(p), 3))</textarea>
+  </div>
+  <div class="output-area" id="output2"></div>
+  <div class="toolbar">
+    <button class="run" onclick="runCode('sandbox2')">▶ 运行 (Ctrl+Enter)</button>
+    <button class="reset" onclick="resetCode('sandbox2')">↺ 恢复初始代码</button>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>🔑 函数的关键心智模型</strong>
+  函数 = 一个<strong>加工机器</strong>。你把原材料（参数）从入口塞进去，机器内部处理，成品（返回值）从出口出来。<br><br>
+  <code>result = average([1,2,3,4,5])</code><br>
+  → 把 [1,2,3,4,5] 塞进 average 机器 → 机器算出 3.0 → 把 3.0 赋值给 result<br><br>
+  后续课程中，<code>model = GPTModel(config)</code> 就是这个模式——把配置字典塞进 GPTModel 函数/类，返回一个构建好的模型。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">3</span> import — 用别人写好的代码</h2>
+
+<p>你不需要从零写所有代码。Python 有海量的<strong>「包」</strong>（package）——别人写好、测试好、打包好的函数和工具，你直接拿来用。</p>
+
+<p><code>import</code> 就是「<strong>把那个包的代码加载进来</strong>」。</p>
+
+<pre><code>import torch                    ← 把 PyTorch 包加载进来
+
+# 现在可以用 torch 里的东西了
+x = torch.randn(3, 768)        ← 生成一个 3×768 的随机矩阵
+layer = torch.nn.Linear(768, 768)  ← 创建一个线性层（就是第 5 课的 Wx+b）
+y = layer(x)                   ← 前向传播：x 经过 layer 变换得到 y</code></pre>
+
+<p>三种 import 方式：</p>
+
+<table>
+  <tr><th>写法</th><th>含义</th><th>后续课程例子</th></tr>
+  <tr><td><code>import torch</code></td><td>加载整个包，用 <code>torch.xxx</code> 访问</td><td><code>torch.nn.Linear(...)</code></td></tr>
+  <tr><td><code>import torch.nn as nn</code></td><td>加载子模块，起个短别名</td><td><code>nn.Linear(...)</code>（省打几个字）</td></tr>
+  <tr><td><code>from torch import nn</code></td><td>只加载 nn 这一个子模块</td><td><code>nn.Linear(...)</code></td></tr>
+</table>
+
+<p>后续课程你会看到这些 import 语句出现在每个 Python 文件的<strong>最开头</strong>。它们是模型的「零件供应商」。</p>
+
+<div class="py-sandbox" id="sandbox3">
+  <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="tname">Python 游乐场 — import 模拟</span></div>
+  <div class="editor-row">
+    <textarea id="code3"># 模拟后续课程的典型 import 结构
+import math                  # 数学函数（log, sqrt 等）
+
+# 以下是在实际 PyTorch 项目中的 import（这里模拟效果）
+# import torch
+# import torch.nn as nn
+
+print("=== math 包的函数 ===")
+print("math.log(2.718) =", math.log(2.718))   # 自然对数
+print("math.sqrt(144) =", math.sqrt(144))      # 平方根
+
+print("\n=== 模拟 torch.randn ===")
+# 在真实代码中是 torch.randn(2, 4)，这里模拟效果
+import random
+random.seed(42)
+print("模拟随机张量 (2×4):")
+for i in range(2):
+    row = [round(random.gauss(0, 1), 3) for _ in range(4)]
+    print(" ", row)
+
+print("\n=== 模拟 nn.Linear(4, 3) ===")
+print("创建一个线性层: 输入 4 维 → 输出 3 维")
+print("这等价于一个 4×3 的权重矩阵 + 3 维偏置")</textarea>
+  </div>
+  <div class="output-area" id="output3"></div>
+  <div class="toolbar">
+    <button class="run" onclick="runCode('sandbox3')">▶ 运行 (Ctrl+Enter)</button>
+    <button class="reset" onclick="resetCode('sandbox3')">↺ 恢复初始代码</button>
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2><span class="step-num">4</span> 怎么看报错信息？—— 重要生存技能</h2>
+
+<p>写代码一定会遇到报错。<strong>不要怕报错</strong>——报错是 Python 在努力告诉你哪里出了问题。关键是学会<strong>读最后一行</strong>。</p>
+
+<div class="py-sandbox" id="sandbox4">
+  <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="tname">Python 游乐场 — 故意写 bug 看报错</span></div>
+  <div class="editor-row">
+    <textarea id="code4"># 以下每段代码都会报错。取消注释（删掉前面的 #）逐个体验。
+# 注意看每个报错的「最后一行」——那行告诉你怎么修。
+
+# ===== 错误 1：变量未定义 =====
+# print(undefined_var)
+# 报错：NameError: name 'undefined_var' is not defined
+# 意思：「我不认识 undefined_var 这个变量，你是不是忘定义了？」
+
+# ===== 错误 2：索引越界 =====
+# data = [1, 2, 3]
+# print(data[5])
+# 报错：IndexError: list index out of range
+# 意思：「列表只有 3 个元素（索引 0~2），你要第 5 个？没有。」
+
+# ===== 错误 3：== 写成了 = =====
+# x = 5
+# if x = 5:
+#     print("yes")
+# 报错：SyntaxError: invalid syntax
+# 意思：「if 后面应该是 ==（判断），你写了 =（赋值），语法错了。」
+
+# ===== 错误 4：缩进不对 =====
+# for i in range(3):
+# print(i)
+# 报错：IndentationError: expected an indented block
+# 意思：「for 后面应该有个缩进的行，你没缩进。」
+
+# ===== 正常代码：不会被报错 =====
+print("如果你看到这行，说明上面的错误代码都被注释掉了。")
+print("试着取消注释某一段，看看报错长什么样。")</textarea>
+  </div>
+  <div class="output-area" id="output4"></div>
+  <div class="toolbar">
+    <button class="run" onclick="runCode('sandbox4')">▶ 运行 (Ctrl+Enter)</button>
+    <button class="reset" onclick="resetCode('sandbox4')">↺ 恢复初始代码</button>
+  </div>
+</div>
+
+<p style="font-size:0.8rem;color:var(--muted);">💡 建议：逐个取消注释（删掉行首的 #），运行一次看报错信息，再改回来。这是学编程最快的方法——故意写 bug，看报错，理解为什么错了。</p>
+
+<div class="callout">
+  <strong>🔑 报错阅读三步法</strong>
+  <strong>① 看最后一行</strong>：那行通常精确说明了错在哪（NameError? SyntaxError? IndexError?）<br>
+  <strong>② 看行号</strong>：报错信息会告诉你是第几行出的问题（"line 5" 之类的）<br>
+  <strong>③ 搜一下</strong>：把最后一行报错信息复制到百度/Bing 搜索，99% 的问题别人遇到过
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>实战：读一段真实的 LLM 训练代码</h2>
+
+<p>学完了两节 Python 课的所有语法点。现在试着读下面这段代码——<strong>这就是 Phase 2 里训练 GPT 的核心逻辑</strong>。不需要完全理解每一行，只需要认出你学过的结构：</p>
+
+<pre><code># Phase 2 课程中会出现的代码（现在先试着读一读）
+import torch
+import torch.nn as nn
+
+# 配置字典
+config = {
+    "vocab_size": 50257,
+    "emb_dim": 768,
+    "n_layers": 12,
+    "n_heads": 12,
+    "max_length": 1024
+}
+
+# 定义模型（一个类，你可以理解为复杂的函数）
+class GPTModel(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.embedding = nn.Embedding(          # ← 第 3 课的查表
+            config["vocab_size"], config["emb_dim"]
+        )
+        self.blocks = nn.ModuleList([           # ← 12 个 Transformer Block
+            TransformerBlock(config)            # ← 第 5 课的结构
+            for _ in range(config["n_layers"])  # ← for 循环！
+        ])
+
+    def forward(self, token_ids):              # ← 前向传播
+        x = self.embedding(token_ids)           # ← 第 3 课
+        for block in self.blocks:               # ← 第 5 课：逐层穿过
+            x = block(x)                        # ← 第 5 课：每个 Block
+        return x
+
+# 训练循环
+def train_one_step(model, batch, optimizer):    # ← 第 6 课
+    inputs, targets = batch                     # ← 输入和目标（第 2 课）
+    outputs = model(inputs)                     # ← 前向传播
+    loss = compute_loss(outputs, targets)       # ← 计算损失（第 6 课）
+    loss.backward()                             # ← 反向传播（第 6 课）
+    optimizer.step()                            # ← 更新参数（第 6 课）
+    return loss.item()                          # ← 返回损失值</code></pre>
+
+<p>认出这些注释里的「第 X 课」了吗？<strong>Phase 1 的 7 节课 + Phase 0 的 Python 基础，加起来就是为了让你能读懂上面这段代码。</strong></p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>本课 + 上节课速查总表</h2>
+
+<table>
+  <tr><th>类别</th><th>你想做什么</th><th>代码</th></tr>
+  <tr><td>变量</td><td>存一个值</td><td><code>x = 42</code></td></tr>
+  <tr><td>列表</td><td>存一堆值</td><td><code>data = [1, 2, 3]</code></td></tr>
+  <tr><td>列表索引</td><td>取第 N 个</td><td><code>data[0]</code>（从 0 开始！）</td></tr>
+  <tr><td>字典</td><td>按名字存取值</td><td><code>config["vocab_size"]</code></td></tr>
+  <tr><td>循环</td><td>遍历列表</td><td><code>for x in data:</code></td></tr>
+  <tr><td>循环</td><td>重复 N 次</td><td><code>for i in range(N):</code></td></tr>
+  <tr><td>判断</td><td>条件分支</td><td><code>if x == 5:</code>（双等号！）</td></tr>
+  <tr><td>函数</td><td>定义可复用的代码块</td><td><code>def fn(x): return x + 1</code></td></tr>
+  <tr><td>导入</td><td>用别人写好的代码</td><td><code>import torch</code></td></tr>
+</table>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 小测验</h2>
+
+<div class="quiz">
+
+<div class="quiz-question">
+  <h4>问题 1/3 — 字典 vs 列表</h4>
+  <p>什么时候用字典，什么时候用列表？给出一个例子。</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>当顺序重要、要逐个遍历时用列表；当需要用名字精确查找时用字典。</strong><br>
+      列表：<code>tokens = ["我", "喜欢", "AI"]</code> — 要按顺序逐个处理<br>
+      字典：<code>config = {"lr": 0.001, "batch_size": 64}</code> — 要通过名字查具体的值
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 2/3 — 函数的 return</h4>
+  <p>下面这个函数在做什么？它的返回值是什么？</p>
+  <pre><code>def compute_loss(prob):
+    return -math.log(prob)</code></pre>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>它计算交叉熵损失。</strong>接收一个概率值（0~1），返回 -ln(概率)。这是第 6 课讲的 Loss 函数。<br>
+      <code>return</code> 后面的值就是函数的输出——调用 <code>compute_loss(0.5)</code> 会得到 <code>0.693</code>。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 3/3 — import 的作用</h4>
+  <p>如果不写 <code>import torch</code>，直接写 <code>x = torch.randn(3, 768)</code>，会发生什么？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>报错：NameError: name 'torch' is not defined。</strong><br>
+      Python 不认识 torch 是什么——因为还没有 import。import 相当于告诉 Python：「我要用 torch 这个工具箱，请加载它」。不 import，Python 就不知道 torch.randn 怎么执行。
+    </div>
+  </details>
+</div>
+
+</div>
+
+<hr>
+
+<nav class="lesson-nav">
+  <a href="0000-02-python-basics-1.html">← 上一课：Python 速通（上）</a>
+  <a href="0001-llm-lifecycle.html">下一课：Phase 1 · LLM 核心任务 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>🤖 Phase 0 完结！三节课覆盖了后续 AI 学习所需的全部前置知识——命令行操作、Python 基础语法、看报错的能力。你现在已经具备了进入 Phase 1（LLM 核心原理）的全部前置条件。Phase 1 的 7 节课已经就绪，从「LLM 做什么」开始你的 AI 旅程。有问题随时问 Bib。</p>
+</footer>
+
+<!-- ============================================================ -->
+<!-- Python Sandbox Engine — shared interpreter + sandbox UI -->
+<!-- ============================================================ -->
+<script src="../assets/python-interpreter.js"></script>
+<script>
+// The runPython() function is now loaded from assets/python-interpreter.js
+
+// Sandbox UI management
+const sandboxDefaults = {};
+
+function initSandbox(id) {
+  const ta = document.getElementById('code' + id.replace('sandbox', ''));
+  if (ta && !sandboxDefaults[id]) sandboxDefaults[id] = ta.value;
+  if (ta) {
+    ta.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runCode(id); }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = this.selectionStart;
+        this.value = this.value.slice(0, start) + '    ' + this.value.slice(this.selectionEnd);
+        this.selectionStart = this.selectionEnd = start + 4;
+      }
+    });
+  }
+}
+
+function runCode(id) {
+  const num = id.replace('sandbox', '');
+  const code = document.getElementById('code' + num).value;
+  const outputEl = document.getElementById('output' + num);
+  const result = runPython(code);
+  outputEl.textContent = result.output.join('
+');
+  outputEl.className = 'output-area';
+}
+
+function resetCode(id) {
+  const num = id.replace('sandbox', '');
+  const ta = document.getElementById('code' + num);
+  if (sandboxDefaults[id]) ta.value = sandboxDefaults[id];
+  document.getElementById('output' + num).textContent = '';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.py-sandbox').forEach(sb => {
+    initSandbox(sb.id);
+    runCode(sb.id);
+  });
+});
+
+</script>
+
+</body>
+</html>

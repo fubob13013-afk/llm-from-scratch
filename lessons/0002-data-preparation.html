@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第2课 · 数据准备：把文字变成模型的食物</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .bpe-demo {
+    margin: 1.25rem 0;
+    padding: 1rem;
+    background: var(--code-bg);
+    border: 2px solid var(--rule);
+    border-radius: 10px;
+  }
+  .bpe-demo h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+  .bpe-step {
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+    margin: 0.25rem 0;
+    background: var(--bg);
+    border-radius: 4px;
+    border-left: 3px solid var(--accent);
+  }
+  .bpe-step .merge { color: var(--accent); font-weight: 700; }
+  .bpe-step .count { color: var(--muted); font-size: 0.75rem; }
+
+  .quiz { margin: 2rem 0; }
+  .quiz-question {
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+  }
+  .quiz-question h4 { margin: 0 0 0.75rem; font-size: 1rem; }
+  .quiz-question details { margin-top: 0.75rem; }
+  .quiz-question summary {
+    cursor: pointer;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.85rem;
+    color: var(--accent);
+    font-weight: 500;
+    user-select: none;
+  }
+  .quiz-question .answer {
+    margin-top: 0.6rem;
+    padding: 0.75rem 1rem;
+    background: var(--callout-bg);
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🥬 第2课 · 数据准备：把文字变成模型的食物</h1>
+
+<p>第 1 课确立了核心任务：<strong>预测下一个词</strong>。但计算机只懂数字。本课回答第一个工程问题：<strong>怎么把人类语言变成模型能计算的数字序列？</strong></p>
+
+<div class="callout">
+  <strong>⚠️ 本课前提</strong>
+  需要知道 LLM 的任务是「预测下一个 token」（第 1 课）。本课解决这之前的一步——怎么把文本变成 token。
+</div>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">原始文本</div><div class="sub">Raw Text</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">分词</div><div class="sub">Tokenization</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">Token ID</div><div class="sub">Vocabulary</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">训练样本</div><div class="sub">Sliding Window</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">数据加载器</div><div class="sub">DataLoader</div></div>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>第一步：分词 —— 把句子「切成块」</h2>
+
+<h3>为什么要切？</h3>
+
+<p>计算机无法直接理解「我喜欢人工智能」这句话。它需要一个<strong>翻译器</strong>，把人类语言翻译成它能处理的<strong>整数序列</strong>。这个翻译器的第一步，就是把句子切成一个个<strong>最小处理单元</strong>——称为 <strong>Token（词元）</strong>。</p>
+
+<h3>三种切法，哪个更好？</h3>
+
+<table>
+  <tr><th>方案</th><th>示例（"人工智能很有趣"）</th><th>优点</th><th>致命缺陷</th></tr>
+  <tr>
+    <td><strong>按词切</strong></td>
+    <td>["人工智能", "很", "有趣"]</td>
+    <td>语义完整</td>
+    <td><mark>词表无限膨胀</mark>：新词永远在出现，"元宇宙"、"i人e人"……词表大到无法管理</td>
+  </tr>
+  <tr>
+    <td><strong>按字切</strong></td>
+    <td>["人", "工", "智", "能", "很", "有", "趣"]</td>
+    <td>词表极小（几千个常用字搞定）</td>
+    <td><mark>序列太长</mark>：一句话变几十个 token，模型处理慢，且丢失词语级别的语义</td>
+  </tr>
+  <tr>
+    <td><strong>子词级（BPE）</strong></td>
+    <td>["人工", "智能", "很", "有趣"]</td>
+    <td>词表可控 + 能处理新词</td>
+    <td>✅ 当前所有主流 LLM 的选择</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>🔑 类比</strong>
+  按词切 = 每道菜都单独起一个名字（菜单无限长）<br>
+  按字切 = 每道菜拆成食材颗粒（描述起来又臭又长）<br>
+  <strong>BPE = 找到最常见的「食材组合」</strong>，比如"番茄炒蛋"记成一个单位，"青椒肉丝"记成一个单位——既不会菜单无限长，也不会描述得太碎。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>核心算法：BPE（Byte Pair Encoding）</h2>
+
+<p>BPE 是 GPT-2/3/4、LLaMA、Qwen、DeepSeek 等<strong>几乎所有模型</strong>都在用的分词算法。它的思路极其简单：</p>
+
+<blockquote>
+从字符级开始，反复合并<strong>出现频率最高的相邻 token 对</strong>，直到词表达到预设大小。
+</blockquote>
+
+<h3>手动走一遍 BPE</h3>
+
+<p>假设我们有这样一份迷你语料（只有 4 个词，每个词后加 <code>&lt;/w&gt;</code> 表示词尾）：</p>
+
+<pre><code>low&lt;/w&gt;    lower&lt;/w&gt;    newest&lt;/w&gt;    widest&lt;/w&gt;</code></pre>
+
+<p><strong>初始状态</strong>——拆成字符：</p>
+
+<pre><code>l o w &lt;/w&gt;    l o w e r &lt;/w&gt;    n e w e s t &lt;/w&gt;    w i d e s t &lt;/w&gt;</code></pre>
+
+<p>词表 = {l, o, w, e, r, n, s, t, i, d, &lt;/w&gt;}，共 11 个。</p>
+
+<p>现在开始合并。每一步找<strong>出现次数最多的相邻对</strong>：</p>
+
+<div class="callout">
+<strong>第 1 轮：</strong>统计所有相邻对出现次数——
+"lo"=2, "ow"=2, "w&lt;/w&gt;"=1, "we"=2, "er"=2, ……
+出现最多的有几组并列，选 <strong>"e" + "s" = "es"</strong>，出现 2 次（new<em>es</em>t, wid<em>es</em>t），合并为新 token <strong>"es"</strong>。
+<br><br>
+语料变为：<code>l o w &lt;/w&gt;  l o w e r &lt;/w&gt;  n e w <mark>es</mark> t &lt;/w&gt;  w i d <mark>es</mark> t &lt;/w&gt;</code>
+<br>词表 += "es"，共 12 个。
+</div>
+
+<div class="callout">
+<strong>第 2 轮：</strong>"es"+"t" = <strong>"est"</strong>，出现 2 次（new<em>est</em>, wid<em>est</em>）。
+<br><br>
+语料变为：<code>l o w &lt;/w&gt;  l o w e r &lt;/w&gt;  n e w <mark>est</mark> &lt;/w&gt;  w i d <mark>est</mark> &lt;/w&gt;</code>
+<br>词表 += "est"，共 13 个。
+</div>
+
+<div class="callout">
+<strong>第 3 轮：</strong>"l"+"o" = <strong>"lo"</strong>，出现 2 次（<em>lo</em>w, <em>lo</em>wer），合并。
+<br>词表 += "lo"，共 14 个。
+</div>
+
+<p>继续重复……假设词表上限设为 16，做完后发现：</p>
+
+<pre><code>原始词："low"     → token: ["lo", "w&lt;/w&gt;"]
+原始词："lower"   → token: ["lo", "w", "er&lt;/w&gt;"]
+原始词："newest"  → token: ["n", "e", "w", "est&lt;/w&gt;"]
+原始词："widest"  → token: ["w", "i", "d", "est&lt;/w&gt;"]</code></pre>
+
+<p>看到了吗？<strong>"low" 和 "lower" 共享了 "lo" 和 "w"</strong>；"newest" 和 "widest" 共享了 "est"。高频组合被合并成独立 token，低频组合保留在字符级。这就是 BPE 的魔力——<strong>用有限的词表，覆盖无限的词汇</strong>。</p>
+
+<h3>BPE 在中文里</h3>
+
+<p>中文 BPE 的初始单位通常是<strong>字节</strong>（UTF-8 编码）或<strong>字符</strong>。以「人工智能很有趣」为例，UTF-8 编码后每个汉字占 3 个字节，BPE 会在字节流上做合并。实际效果是：常见词组（"人工智能"、"学习"）会合并成一个 token；罕见组合保留为单个字。</p>
+
+<p>一个经验数据：<strong>1 个中文 token ≈ 1~1.8 个汉字</strong>；<strong>1 个英文 token ≈ 0.75 个单词 ≈ 3~4 个字母</strong>。这就是为什么同样的内容，中文需要的 token 数通常比英文少。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>第二步：Token → ID（词表映射）</h2>
+
+<p>BPE 跑完后，我们有了一个<strong>词表（Vocabulary）</strong>——每个 token 对应一个唯一的整数 ID：</p>
+
+<table>
+  <tr><th>Token</th><td>"lo"</td><td>"w"</td><td>"er"</td><td>"est"</td><td>"&lt;/w&gt;"</td><td>"n"</td><td>"e"</td><td>"i"</td><td>"d"</td><td>……</td></tr>
+  <tr><th>ID</th><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>……</td></tr>
+</table>
+
+<p>把文本翻译成 ID，就是查表：</p>
+
+<pre><code>输入文本:  "lower"
+分词结果:  ["lo", "w", "er&lt;/w&gt;"]
+Token ID:  [0, 1, 2]</code></pre>
+
+<p>这就是模型真正「看到」的东西——<strong>一串整数</strong>。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>第三步：特殊 Token</h2>
+
+<dl>
+  <dt><code>[BOS]</code> / <code>&lt;|startoftext|&gt;</code></dt>
+  <dd>句子开头标记。告诉模型：「这是一段文本的起点」</dd>
+  <dt><code>[EOS]</code> / <code>&lt;|endoftext|&gt;</code></dt>
+  <dd>句子结尾标记。模型生成这个 token 时，意味着「我说完了，可以停了」</dd>
+  <dt><code>[PAD]</code></dt>
+  <dd>填充标记。一个 batch 里句子长短不一时，短句后面补 PAD 对齐</dd>
+  <dt><code>[UNK]</code></dt>
+  <dd>未知词标记。现代 BPE 基本不会出现，因为 BPE 能从字符级重建任何词</dd>
+</dl>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>第四步：滑动窗口 —— 造出训练样本</h2>
+
+<p>现在所有文本都变成了数字序列。回忆第 1 课的核心洞察：<strong>训练样本的输入和目标来自同一条序列，只是错开了一位</strong>。这个操作叫<strong>滑动窗口</strong>。</p>
+
+<p>假设窗口大小 = 4，有一个 token 序列：</p>
+
+<pre><code>[BOS] 我 喜欢 学习 人工 智能 很 有趣 [EOS]
+  0    1   2    3    4    5   6   7    8</code></pre>
+
+<p>滑动窗口从最左边开始，每次向右挪一格：</p>
+
+<table>
+  <tr><th>样本 #</th><th>输入（模型看到的）</th><th>目标（模型要猜的）</th></tr>
+  <tr><td>1</td><td>[0, 1, 2, 3] → [BOS] 我 喜欢 学习</td><td>[1, 2, 3, 4] → 我 喜欢 学习 人工</td></tr>
+  <tr><td>2</td><td>[1, 2, 3, 4] → 我 喜欢 学习 人工</td><td>[2, 3, 4, 5] → 喜欢 学习 人工 智能</td></tr>
+  <tr><td>3</td><td>[2, 3, 4, 5] → 喜欢 学习 人工 智能</td><td>[3, 4, 5, 6] → 学习 人工 智能 很</td></tr>
+  <tr><td>4</td><td>[3, 4, 5, 6] → 学习 人工 智能 很</td><td>[4, 5, 6, 7] → 人工 智能 很 有趣</td></tr>
+  <tr><td>5</td><td>[4, 5, 6, 7] → 人工 智能 很 有趣</td><td>[5, 6, 7, 8] → 智能 很 有趣 [EOS]</td></tr>
+</table>
+
+<div class="callout">
+  <strong>🔑 核心洞察</strong>
+  输入和目标<strong>来自同一条序列，只是错开了一位</strong>（shifted by 1）。目标序列就是输入序列往右移一格。<strong>不需要人工标注</strong>——这就是第 1 课讲的「自监督学习」的具体实现。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>第五步：DataLoader —— 组装成批次</h2>
+
+<h3>前置知识：CPU vs GPU</h3>
+
+<div class="callout">
+  <strong>🔑 核心类比</strong>
+  <strong>CPU</strong> = 一个数学天才，能心算微积分，但一次只能算一道题。<br>
+  <strong>GPU</strong> = 1000 个小学生，每人只会做加减法，但<strong>同时做 1000 道题</strong>。
+  <br><br>
+  训练神经网络的运算恰好是「大量简单运算同时做」——矩阵乘法就是几万个加减法同时算。这种工作丢给 CPU 是折磨天才，丢给 GPU 是小学生狂欢。
+</div>
+
+<h3>① Batching（批处理）—— 为什么不能一个一个喂？</h3>
+
+<p>GPU 有几千个核心。如果一次只喂 1 个样本，几千个核心里只有几个在工作——利用率大约 <strong>3%</strong>。而且数据从内存搬到 GPU 的「搬运费」是固定的：搬 1 个样本和搬 64 个样本耗时差不多。</p>
+
+<p>所以 batch_size=64 的意思是：<strong>每次搬 64 个样本一起算，搬运费只花一次，GPU 几千个核心也都有活干</strong>。</p>
+
+<h3>② Padding（填充）—— 句子长短不一怎么办？</h3>
+
+<p>GPU 做矩阵运算时，数据必须是<strong>矩形</strong>——每行长度必须相同。但真实句子天然长短不一。Padding 的做法：<strong>同一批里，所有句子垫到和最长的那条一样长，短的在后面补 [PAD]</strong>。</p>
+
+<p>模型不会把 [PAD] 当真内容学——训练时有一个叫 <strong>Attention Mask（注意力掩码）</strong> 的机制，明确告诉模型这些 PAD 位置是假的，计算时跳过它们（第 4 课详述）。</p>
+
+<h3>③ Shuffling（打乱）—— 为什么要洗牌？</h3>
+
+<p>假设训练数据按类别排列：前 5000 条科技，中间 5000 条娱乐，后 5000 条体育。如果不打乱，模型连续看 5000 条科技后会发现：「反正这一片全是科技，我猜科技词汇就对了」——<strong>它在利用数据排列顺序作弊，而不是学习语言规律</strong>。</p>
+
+<p><strong>Shuffling = 每个 epoch 开始前洗一次牌</strong>，让模型没法靠顺序偷懒。</p>
+
+<h3>三者配合的完整流程</h3>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">全部样本</div><div class="sub">100 万条</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">Shuffle</div><div class="sub">随机打乱</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">分组</div><div class="sub">每 64 条一组</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">Padding</div><div class="sub">组内对齐</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="label">喂给 GPU</div><div class="sub">一个 batch</div></div>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>🧪 小测验</h2>
+
+<div class="quiz">
+
+<div class="quiz-question">
+  <h4>问题 1/3 — BPE 的核心逻辑</h4>
+  <p>BPE 在每轮迭代中合并什么？合并多少次？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>每轮合并「出现频率最高的相邻 token 对」，一直合并到词表达预设大小为止。</strong><br>
+      预设大小（如 50,000）减去初始字符数 = 合并的总轮数。每一轮词表增加 1 个新 token。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 2/3 — 滑动窗口</h4>
+  <p>为什么说「不需要人工标注数据」？滑动窗口是怎么自动产生「输入→目标」对？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>因为目标序列就是输入序列向右移一位。</strong>给定 token 序列 [A, B, C, D, E]，滑动窗口自动生成：输入 [A, B, C, D] → 目标 [B, C, D, E]。文本自己就提供了每个位置的「正确答案」。这就是自监督学习。
+    </div>
+  </details>
+</div>
+
+<div class="quiz-question">
+  <h4>问题 3/3 — Shuffling 的必要性</h4>
+  <p>如果不做 Shuffling，模型会学到什么「作弊」策略？</p>
+  <details>
+    <summary>点击看答案</summary>
+    <div class="answer">
+      <strong>模型会利用数据排列顺序来预测，而不是学习语言规律。</strong>比如连续 5000 条科技新闻后，模型学会了「闭着眼睛猜科技词汇就对了」——它在利用数据集的排列规律作弊，而不是真正理解文本内容的统计规律。
+    </div>
+  </details>
+</div>
+
+</div>
+
+<hr>
+
+<h2>📺 推荐观看</h2>
+
+<ul>
+  <li><strong>必看：<a href="https://www.bilibili.com/video/BV1EQtuz2EJM">B站 · 《从零构建大模型》配套视频中文版 第2章</a></strong> — 演示分词→BPE→数据采样的完整流程。</li>
+  <li><strong>补充：<a href="https://www.bilibili.com/video/BV1dAEz6EEEP">B站 · 大模型训练第一步：数据集与分词全解析</a></strong> — 20 分钟，对比三种分词方案的优劣。</li>
+</ul>
+
+<hr>
+
+<nav class="lesson-nav">
+  <a href="0001-llm-lifecycle.html">← 上一课：LLM 核心任务</a>
+  <a href="0003-embedding.html">下一课：词嵌入与位置编码 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>🤖 本课解决了「文本→数字」的转换。但 Token ID 只是一个编号（15 和 16 的差距是任意的），它不携带语义。下一课讲怎么让这些数字「活」起来——Embedding 给每个 token 赋予一个语义坐标。有问题随时问 Bib。</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第6课 · 训练循环 —— 模型怎么学？</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  /* --- Experiment cards --- */
+  .experiment {
+    margin: 1.5rem 0;
+    border: 2px solid var(--rule);
+    border-radius: 10px;
+    padding: 1.25rem;
+    background: var(--code-bg);
+  }
+  .experiment h4 {
+    margin: 0 0 0.75rem;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .experiment .desc {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+  .exp-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .exp-controls {
+    flex: 0 0 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .exp-controls label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif;
+  }
+  .exp-controls input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .exp-controls input[type=number] {
+    width: 80px;
+    padding: 2px 6px;
+    font-size: 0.8rem;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "JetBrains Mono", Consolas, monospace;
+  }
+  .exp-controls button {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    background: var(--bg);
+    color: var(--accent);
+    cursor: pointer;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", sans-serif;
+    transition: background 0.15s;
+  }
+  .exp-controls button:hover { background: var(--accent); color: #fff; }
+  .exp-controls button.primary { background: var(--accent); color: #fff; }
+  .exp-controls button.primary:hover { opacity: 0.85; }
+  .exp-canvas {
+    flex: 1 1 320px;
+    min-width: 280px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--bg);
+  }
+  .exp-stats {
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.8;
+    color: var(--muted);
+  }
+  .exp-stats span { color: var(--text); font-weight: 600; }
+  @media (max-width: 640px) {
+    .exp-row { flex-direction: column; }
+    .exp-controls { flex: 0 0 auto; width: 100%; }
+  }
+
+  /* --- Step-by-step flow --- */
+  .training-flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    margin: 1.25rem 0;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.78rem;
+  }
+  .training-flow .step {
+    background: var(--callout-bg);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    text-align: center;
+    font-weight: 600;
+  }
+  .training-flow .arrow { color: var(--faint); font-size: 1rem; }
+</style>
+</head>
+<body>
+
+<h1>🔄 第6课 · 训练循环 —— 模型怎么学？</h1>
+
+<p style="font-size:1.05rem;color:var(--muted);">前 5 课讲完了「模型长什么样」——Embedding、Attention、FFN、残差、LayerNorm。本课回答：<strong>这些部件里的参数（几十亿个数字）是怎么被调到合适的值的？</strong></p>
+
+<div class="callout">
+  <strong>⚠️ 本课前提</strong>
+  需要第 5 课中「导数在训练中的作用」（山的类比）和「残差连接为什么需要」的基本理解。如果忘了，回头扫一眼第 5 课 §2 的三个插曲小节。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>回顾：目前我们有什么？</h2>
+
+<p>一串文本经过以下流水线：</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">原始文本</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">分词</div><div class="sub">Token ID 序列</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">Embedding</div><div class="sub">向量序列</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">×12 Block</div><div class="sub">Attention + FFN + 残差 + LN</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">输出</div><div class="sub">下一个 token 的概率</div></div>
+</div>
+
+<p>这个流水线里塞满了参数——W^Q, W^K, W^V, W^O, W₁, W₂, b₁, b₂, γ, β……总共几十亿个数字。它们一开始都是<strong>随机数</strong>。如果就这样拿去预测下一个 token，结果基本是瞎猜。</p>
+
+<p><strong>训练的过程，就是反复做一件事：让模型猜 → 看错得多离谱 → 算出每个参数该往哪边调 → 微调 → 再来一次。</strong></p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§1 损失函数（Loss Function）——用数字衡量「错得多离谱」</h2>
+
+<h3>为什么需要一个数字？</h3>
+
+<p>上面说的「看错得多离谱」，需要一个客观的、可比较的数字。不能靠人眼看——几百万次迭代，人眼看不过来。这个数字就是<strong>损失值（Loss）</strong>。</p>
+
+<p>LLM 的训练目标是预测下一个 token。所以损失函数问的问题是：</p>
+
+<blockquote>
+  <p>模型给「正确答案」的概率有多高？概率越高 → 损失越低。</p>
+</blockquote>
+
+<h3>交叉熵损失（Cross-Entropy Loss）</h3>
+
+<p>LLM 使用的损失函数叫<strong>交叉熵损失</strong>。公式非常简洁：</p>
+
+<pre><code>Loss = -log( 模型给正确 token 的概率 )</code></pre>
+
+<p>log 是自然对数（ln）。几个例子：</p>
+
+<table>
+  <tr><th>模型给正确答案的概率</th><th>Loss</th><th>意味着</th></tr>
+  <tr><td>0.9（90%）</td><td>-ln(0.9) ≈ 0.105</td><td>模型很确定，loss 很低</td></tr>
+  <tr><td>0.5（50%）</td><td>-ln(0.5) ≈ 0.693</td><td>模型在猜硬币，一半把握</td></tr>
+  <tr><td>0.1（10%）</td><td>-ln(0.1) ≈ 2.30</td><td>模型基本没往正确方向想</td></tr>
+  <tr><td>0.00002（1/50000）</td><td>-ln(0.00002) ≈ 10.8</td><td>完全瞎猜（词表 50000 个词均匀分布）</td></tr>
+</table>
+
+<p>为什么用 log？因为概率从 0.9 掉到 0.1，在人的直觉里是「差了一点」，但 -ln 把差距拉大了（0.105 → 2.30），<strong>让模型对「不靠谱的预测」受到更大的惩罚</strong>。</p>
+
+<div class="experiment" id="exp1">
+  <h4>🧪 实验 1：感受交叉熵损失</h4>
+  <p class="desc">拖动滑块改变模型对正确答案的预测概率，观察损失值的变化。注意概率很低时损失如何暴涨。</p>
+  <div class="exp-row">
+    <div class="exp-controls">
+      <label>预测概率：<span id="ce-prob-display">0.50</span></label>
+      <input type="range" id="ce-prob" min="0.01" max="0.99" step="0.01" value="0.50">
+      <div class="exp-stats">
+        Loss = -ln(<span id="ce-prob-val">0.50</span>)<br>
+        = <strong><span id="ce-loss" style="font-size:1.1rem;">0.693</span></strong>
+      </div>
+      <p style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;">试着把概率拖到非常低（如 0.01），感受 loss 暴增。</p>
+    </div>
+    <canvas class="exp-canvas" id="ce-canvas" width="400" height="260"></canvas>
+  </div>
+</div>
+
+<h3>实际训练中：不止一个 token</h3>
+
+<p>上面是一个 token 的情况。实际训练中，一次处理一个 batch（比如 512 条文本，每条 1024 个 token）——将近 50 万个 token。每个 token 位置都算一个 loss，然后取平均。这就是这一个 step 的损失值。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§2 梯度下降——沿着山坡往下走</h2>
+
+<p>有了损失值，就知道了「当前有多差」。下一步：<strong>往哪个方向调参数能让损失变小？</strong></p>
+
+<h3>复习第 5 课的关键洞察</h3>
+
+<p>损失 L 是所有参数的函数：L = f(W₁, W₂, b₁, …)。对某个参数求导，得到的是：</p>
+
+<blockquote>
+  <p>「其他参数都不动，单独把这个值调大一丁点，损失会怎么变？」</p>
+</blockquote>
+
+<ul>
+  <li>导数 &gt; 0 → 调大它会让损失变大 → <strong>减小</strong>它</li>
+  <li>导数 &lt; 0 → 调大它会让损失变小 → <strong>增大</strong>它</li>
+</ul>
+
+<p>更新规则：<code>新值 = 旧值 - 学习率 × 导数</code></p>
+
+<h3>学习率（Learning Rate）——步子迈多大</h3>
+
+<p>学习率是最重要的训练参数之一。它控制每次更新的幅度：</p>
+
+<ul>
+  <li><strong>太大</strong>：步子迈太大，在最低点附近反复横跳，甚至越跳越高</li>
+  <li><strong>太小</strong>：走得太慢，可能训练到天荒地老还没到谷底</li>
+  <li><strong>刚好</strong>：稳步下降，收敛到最低点</li>
+</ul>
+
+<div class="experiment" id="exp2">
+  <h4>🧪 实验 2：梯度下降可视化</h4>
+  <p class="desc">我们要最小化 f(x) = x²（一个简单的凸函数，最低点在 x=0）。从 x=4 开始，观察梯度下降如何一步步走到最低点。</p>
+  <div class="exp-row">
+    <div class="exp-controls">
+      <label>学习率：<span id="gd-lr-display">0.3</span></label>
+      <input type="range" id="gd-lr" min="0.05" max="1.2" step="0.01" value="0.3">
+      <div style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+        <button class="primary" onclick="gdStep()">➡ 单步</button>
+        <button onclick="gdAuto()">▶ 自动</button>
+        <button onclick="gdReset()">↺ 重置</button>
+      </div>
+      <div class="exp-stats">
+        x = <span id="gd-x">4.00</span><br>
+        f(x) = <span id="gd-fx">16.00</span><br>
+        步数：<span id="gd-steps">0</span>
+      </div>
+      <p style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;">试试学习率=0.1、0.5、1.1，感受区别。</p>
+    </div>
+    <canvas class="exp-canvas" id="gd-canvas" width="400" height="280"></canvas>
+  </div>
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§3 一个完整的训练步骤（Training Step）</h2>
+
+<p>把前面的概念串起来，一次完整的参数更新包含四步：</p>
+
+<div class="training-flow">
+  <div class="step">① 前向传播<br>Forward Pass</div>
+  <span class="arrow">→</span>
+  <div class="step">② 计算损失<br>Compute Loss</div>
+  <span class="arrow">→</span>
+  <div class="step">③ 反向传播<br>Backward Pass</div>
+  <span class="arrow">→</span>
+  <div class="step">④ 更新参数<br>Update</div>
+  <span class="arrow">→</span>
+  <span style="font-size:0.7rem;color:var(--muted);">回到 ①</span>
+</div>
+
+<h3>① 前向传播（Forward Pass）</h3>
+<p>把输入数据喂给模型，一路算到输出。此时参数不动，只是走一遍——Embedding → Attention → FFN → … → 输出概率分布。这步得到模型的预测结果。</p>
+
+<h3>② 计算损失（Compute Loss）</h3>
+<p>把预测结果和正确答案对比，用交叉熵算一个数字。这个数字就是「当前有多差」。</p>
+
+<h3>③ 反向传播（Backward Pass）</h3>
+<p>从损失出发，用链式法则逐层往回算每个参数的梯度。这一步不更新参数，只是算出「每个参数该往哪边调、调多大」。</p>
+<p>这一步就是第 5 课 §2 讨论的「链式法则连乘」——梯度从最后一层往回传。</p>
+
+<h3>④ 更新参数（Parameter Update）</h3>
+<p>每个参数按照 <code>新值 = 旧值 - 学习率 × 梯度</code> 微调。几十亿个参数同时做这件事。</p>
+
+<p>然后<strong>回到第 ① 步</strong>，用下一批数据再来一遍。反复几百万次。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§4 训练循环中的三个关键参数</h2>
+
+<table>
+  <tr><th>参数</th><th>含义</th><th>直觉</th></tr>
+  <tr>
+    <td><strong>学习率</strong><br>Learning Rate</td>
+    <td>每次更新的步长</td>
+    <td>太大 → 跳来跳去不收敛；太小 → 慢如蜗牛。通常从 0.001 或 0.0001 起步，训练过程中逐渐减小</td>
+  </tr>
+  <tr>
+    <td><strong>批次大小</strong><br>Batch Size</td>
+    <td>每步用多少条数据</td>
+    <td>太小 → 梯度不稳定（每次方向变化大）；太大 → 显存放不下，且可能陷入局部最优点。LLM 训练通常使用数百万 token 级别的超大 batch</td>
+  </tr>
+  <tr>
+    <td><strong>Epoch 数</strong></td>
+    <td>把全部训练数据过多少遍</td>
+    <td>遍数太少 → 没学够（欠拟合）；遍数太多 → 背答案（过拟合）。一般训练到验证损失不再下降就停</td>
+  </tr>
+</table>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§5 怎么知道「学好了」？—— 训练损失 vs 验证损失</h2>
+
+<h3>关键区分</h3>
+
+<dl>
+  <dt>训练损失（Training Loss）</dt>
+  <dd>在<strong>训练数据</strong>上计算的损失。这个值用于反向传播，直接驱动参数更新。</dd>
+
+  <dt>验证损失（Validation Loss）</dt>
+  <dd>在模型<strong>没见过</strong>的数据上计算的损失。这个值<strong>不用于更新参数</strong>，纯粹用来观察——模型是真的学会了规律，还是在背训练集？</dd>
+</dl>
+
+<h3>过拟合（Overfitting）</h3>
+
+<p>如果训练损失持续下降而验证损失开始上升，说明模型在「背答案」而不是「学规律」：</p>
+
+<pre><code>训练损失：↘↘↘↘↘↘↘ （一直在降，模型在努力背）
+验证损失：↘↘↘↗↗↗ （先降后升，说明背的东西在没见过的新题上不管用了）</code></pre>
+
+<p><strong>实操中，训练到验证损失不再下降就停。</strong>这个策略叫<strong>早停法（Early Stopping）</strong>——不在训练集上追求最低损失，而是在验证集上找到最佳平衡点。</p>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>§6 🧪 综合实验：训练你的第一个「模型」</h2>
+
+<p>以下实验在浏览器中完整模拟了一个训练循环。虽然是一个极简的线性回归问题（只有 2 个参数），但<strong>四步循环（前向 → 损失 → 反向 → 更新）和训练 GPT 的逻辑完全一样</strong>。</p>
+
+<div class="experiment" id="exp3">
+  <h4>🧪 实验 3：微型训练循环 —— 让一条直线学会拟合数据</h4>
+  <p class="desc">
+    模型：y = wx + b（两个参数 w 和 b，初始随机）。<br>
+    目标：学会穿过一批散点（这些散点大致分布在 y = 2x + 1 周围）。<br>
+    损失函数：均方误差（MSE），和交叉熵不同但同样是「衡量预测和真值的差距」。
+  </p>
+  <div class="exp-row">
+    <div class="exp-controls">
+      <label>学习率：<span id="train-lr-display">0.01</span></label>
+      <input type="range" id="train-lr" min="0.001" max="0.1" step="0.001" value="0.01">
+      <div style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+        <button class="primary" onclick="trainStep(1)">➡ 1 步</button>
+        <button onclick="trainStep(10)">10 步</button>
+        <button onclick="trainStep(100)">100 步</button>
+        <button onclick="trainReset()">↺ 重置</button>
+      </div>
+      <div class="exp-stats">
+        步数：<span id="train-steps">0</span><br>
+        Loss：<span id="train-loss">—</span><br>
+        w = <span id="train-w">—</span>（目标: 2.0）<br>
+        b = <span id="train-b">—</span>（目标: 1.0）
+      </div>
+    </div>
+    <canvas class="exp-canvas" id="train-canvas" width="420" height="320"></canvas>
+  </div>
+</div>
+
+<div class="callout" style="margin-top:1rem;">
+  <strong>💡 观察提示</strong>
+  先点「1 步」几次，观察直线缓慢移动，loss 缓慢下降。然后把学习率调到 0.05，点「100 步」，观察更快收敛。如果把学习率调到很大（如 0.5），w 和 b 会剧烈震荡甚至发散——这就是学习率太大的后果。
+</div>
+
+<hr>
+
+<!-- ============================================================ -->
+<h2>把一切串起来</h2>
+
+<p>到这里，你知道了：</p>
+
+<ul>
+  <li><strong>模型怎么算</strong>（第 2-5 课）：分词 → Embedding → Attention → FFN → 残差 → LN，12 层串联，最后输出下一个 token 的概率</li>
+  <li><strong>模型怎么学</strong>（本课）：重复「前向 → 算损失 → 反向求梯度 → 更新参数」，每一步都让损失降一点点，几百万步后收敛</li>
+</ul>
+
+<p>LLM 的训练就是这个循环的超级放大版：不是 2 个参数而是几千亿个参数，不是 50 个数据点而是几万亿个 token，不是单机 CPU 而是几千张 GPU 跑几个月。但<strong>核心逻辑一模一样</strong>。</p>
+
+<hr>
+
+<h2>📺 推荐观看</h2>
+
+<ul>
+  <li><strong><a href="https://www.bilibili.com/video/BV1bx411M7Zx">B站 · 3Blue1Brown 梯度下降法</a></strong> — 用动画直观理解梯度下降为什么能找到最低点。</li>
+  <li><strong><a href="https://www.bilibili.com/video/BV16J411f7Nt">B站 · 3Blue1Brown 反向传播</a></strong> — 可视化链式法则如何把误差从最后一层传回第一层。</li>
+</ul>
+
+<hr>
+
+<nav class="lesson-nav">
+  <a href="0005-feedforward-residual.html">← 上一课：Transformer Block 完整结构</a>
+  <a href="../learning-records/0006-training-loop.md">学习记录 →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>🤖 本课补完了「模型怎么学」的完整逻辑。前向 → 损失 → 反向 → 更新，四步循环。交叉熵衡量差距，链式法则分配责任，梯度下降执行调整。实验 3 的 2 参数模型和 GPT 的训练逻辑完全一致——差别只在规模。下一课将整合全部知识，搭建一个可运行的小型 GPT 训练 demo。</p>
+</footer>
+
+<!-- ============================================================ -->
+<!-- EXPERIMENT SCRIPTS -->
+<!-- ============================================================ -->
+<script>
+// ========== Experiment 1: Cross-Entropy Calculator ==========
+(function() {
+  const slider = document.getElementById('ce-prob');
+  const probDisplay = document.getElementById('ce-prob-display');
+  const probVal = document.getElementById('ce-prob-val');
+  const lossEl = document.getElementById('ce-loss');
+  const canvas = document.getElementById('ce-canvas');
+  const ctx = canvas.getContext('2d');
+
+  function update(p) {
+    p = parseFloat(p);
+    probDisplay.textContent = p.toFixed(2);
+    probVal.textContent = p.toFixed(2);
+    const loss = -Math.log(p);
+    lossEl.textContent = loss.toFixed(4);
+    draw(p, loss);
+  }
+
+  function draw(p, loss) {
+    const W = canvas.width, H = canvas.height;
+    const pad = {top: 30, right: 30, bottom: 40, left: 50};
+    const pw = W - pad.left - pad.right;
+    const ph = H - pad.top - pad.bottom;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Axes
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, pad.top);
+    ctx.lineTo(pad.left, H - pad.bottom);
+    ctx.lineTo(W - pad.right, H - pad.bottom);
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#888'; ctx.font = '11px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('预测概率 →', W/2, H - 5);
+    ctx.save();
+    ctx.translate(12, H/2);
+    ctx.rotate(-Math.PI/2);
+    ctx.fillText('Loss = -ln(p)', 0, 0);
+    ctx.restore();
+
+    // Curve: y = -ln(x), map to pixel space
+    ctx.strokeStyle = '#c44'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    let first = true;
+    for (let i = 0; i <= pw; i++) {
+      const prob = 0.01 + (i / pw) * 0.98; // 0.01 to 0.99
+      const y = -Math.log(prob);
+      const maxY = -Math.log(0.01); // ~4.605
+      const px = pad.left + i;
+      const py = pad.top + (y / maxY) * ph;
+      if (first) { ctx.moveTo(px, py); first = false; }
+      else { ctx.lineTo(px, py); }
+    }
+    ctx.stroke();
+
+    // Current point
+    const maxY = -Math.log(0.01);
+    const px = pad.left + ((p - 0.01) / 0.98) * pw;
+    const py = pad.top + (loss / maxY) * ph;
+
+    // Dashed lines to axes
+    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, H - pad.bottom); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(pad.left, py); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Point
+    ctx.fillStyle = '#c44';
+    ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
+
+    // Loss label
+    ctx.fillStyle = '#c44'; ctx.font = 'bold 13px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(loss.toFixed(3), px + 10, py - 8);
+  }
+
+  slider.addEventListener('input', function() { update(this.value); });
+  update(0.5);
+})();
+
+// ========== Experiment 2: Gradient Descent ==========
+(function() {
+  let x = 4.0;
+  let steps = 0;
+  let autoTimer = null;
+
+  function f(val) { return val * val; }
+  function grad(val) { return 2 * val; }
+
+  const canvas = document.getElementById('gd-canvas');
+  const ctx = canvas.getContext('2d');
+
+  function draw() {
+    const W = canvas.width, H = canvas.height;
+    const pad = {top: 20, right: 30, bottom: 40, left: 50};
+    const pw = W - pad.left - pad.right;
+    const ph = H - pad.top - pad.bottom;
+
+    // Map: x in [-5, 5], y in [0, 25]
+    function xToPx(val) { return pad.left + ((val + 5) / 10) * pw; }
+    function yToPy(val) { return pad.top + (1 - val / 25) * ph; }
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Axes
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, pad.top);
+    ctx.lineTo(pad.left, H - pad.bottom);
+    ctx.lineTo(W - pad.right, H - pad.bottom);
+    ctx.stroke();
+
+    // Axis labels
+    ctx.fillStyle = '#888'; ctx.font = '11px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center'; ctx.fillText('x →', W/2, H - 5);
+    ctx.fillText('0', pad.left - 8, H - pad.bottom + 14);
+    ctx.save(); ctx.translate(12, H/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('f(x) = x²', 0, 0); ctx.restore();
+
+    // Curve
+    ctx.strokeStyle = '#666'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let first = true;
+    for (let i = 0; i <= pw; i++) {
+      const val = -5 + (i / pw) * 10;
+      const y = f(val);
+      const px = xToPx(val);
+      const py = yToPy(y);
+      if (first) { ctx.moveTo(px, py); first = false; }
+      else { ctx.lineTo(px, py); }
+    }
+    ctx.stroke();
+
+    // Tangent line at current x
+    const slope = grad(x);
+    const y0 = f(x);
+    const tanLen = 1.5; // half-length in x-units
+    const x1 = x - tanLen, x2 = x + tanLen;
+    const y1 = y0 + slope * (x1 - x);
+    const y2 = y0 + slope * (x2 - x);
+    ctx.strokeStyle = '#e88'; ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(xToPx(x1), yToPy(Math.max(0, y1)));
+    ctx.lineTo(xToPx(x2), yToPy(Math.min(25, y2)));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Ball at current position
+    const bx = xToPx(x), by = yToPy(y0);
+    ctx.fillStyle = '#c44';
+    ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(bx, by, 7, 0, Math.PI * 2); ctx.stroke();
+
+    // Value label
+    ctx.fillStyle = '#c44'; ctx.font = 'bold 12px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('x=' + x.toFixed(3), bx + 12, by - 4);
+
+    // Minimum marker
+    ctx.fillStyle = '#4a4'; ctx.font = '11px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center';
+    const mx = xToPx(0), my = yToPy(0);
+    ctx.fillText('▼ 最低点', mx, my + 16);
+  }
+
+  function updateUI() {
+    document.getElementById('gd-x').textContent = x.toFixed(3);
+    document.getElementById('gd-fx').textContent = f(x).toFixed(4);
+    document.getElementById('gd-steps').textContent = steps;
+    draw();
+  }
+
+  window.gdStep = function() {
+    const lr = parseFloat(document.getElementById('gd-lr').value);
+    const g = grad(x);
+    x = x - lr * g;
+    steps++;
+    updateUI();
+    // Stop auto if converged
+    if (Math.abs(x) < 0.001 && autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+    }
+  };
+
+  window.gdAuto = function() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; return; }
+    autoTimer = setInterval(function() {
+      if (Math.abs(x) < 0.001) { clearInterval(autoTimer); autoTimer = null; return; }
+      gdStep();
+    }, 200);
+  };
+
+  window.gdReset = function() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    x = 4.0;
+    steps = 0;
+    updateUI();
+  };
+
+  document.getElementById('gd-lr').addEventListener('input', function() {
+    document.getElementById('gd-lr-display').textContent = parseFloat(this.value).toFixed(2);
+  });
+
+  updateUI();
+})();
+
+// ========== Experiment 3: Mini Training Loop ==========
+(function() {
+  // Generate synthetic data: y = 2x + 1 + noise
+  const TRUE_W = 2.0, TRUE_B = 1.0;
+  const N = 50;
+  const data = [];
+  for (let i = 0; i < N; i++) {
+    const x = (Math.random() * 10); // 0 to 10
+    const noise = (Math.random() - 0.5) * 3; // -1.5 to 1.5
+    const y = TRUE_W * x + TRUE_B + noise;
+    data.push({x, y});
+  }
+
+  let w = Math.random() * 2 - 1; // random in [-1, 1]
+  let b = Math.random() * 2 - 1;
+  let steps = 0;
+
+  function predict(x) { return w * x + b; }
+
+  function computeLoss() {
+    let total = 0;
+    for (const d of data) {
+      const pred = predict(d.x);
+      total += (pred - d.y) * (pred - d.y);
+    }
+    return total / data.length;
+  }
+
+  function computeGradients() {
+    let dw = 0, db = 0;
+    for (const d of data) {
+      const pred = predict(d.x);
+      const diff = pred - d.y;
+      dw += 2 * diff * d.x;
+      db += 2 * diff;
+    }
+    return {dw: dw / data.length, db: db / data.length};
+  }
+
+  const canvas = document.getElementById('train-canvas');
+  const ctx = canvas.getContext('2d');
+
+  function draw() {
+    const W = canvas.width, H = canvas.height;
+    const pad = {top: 20, right: 20, bottom: 40, left: 50};
+    const pw = W - pad.left - pad.right;
+    const ph = H - pad.top - pad.bottom;
+
+    const xMin = 0, xMax = 10;
+    const yMin = -2, yMax = 24;
+
+    function xToPx(val) { return pad.left + ((val - xMin) / (xMax - xMin)) * pw; }
+    function yToPy(val) { return pad.top + (1 - (val - yMin) / (yMax - yMin)) * ph; }
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Axes
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, pad.top);
+    ctx.lineTo(pad.left, H - pad.bottom);
+    ctx.lineTo(W - pad.right, H - pad.bottom);
+    ctx.stroke();
+
+    ctx.fillStyle = '#888'; ctx.font = '11px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('x →', W/2, H - 5);
+    ctx.save();
+    ctx.translate(14, H/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('y →', 0, 0);
+    ctx.restore();
+
+    // Data points
+    ctx.fillStyle = '#666';
+    for (const d of data) {
+      ctx.beginPath();
+      ctx.arc(xToPx(d.x), yToPy(d.y), 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // True line (y = 2x + 1)
+    ctx.strokeStyle = '#aaa'; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(xToPx(xMin), yToPy(TRUE_W * xMin + TRUE_B));
+    ctx.lineTo(xToPx(xMax), yToPy(TRUE_W * xMax + TRUE_B));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#aaa'; ctx.font = '10px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('目标: y=2x+1', xToPx(7.5), yToPy(TRUE_W * 7.5 + TRUE_B) - 6);
+
+    // Fitted line
+    ctx.strokeStyle = '#c44'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xToPx(xMin), yToPy(predict(xMin)));
+    ctx.lineTo(xToPx(xMax), yToPy(predict(xMax)));
+    ctx.stroke();
+    ctx.fillStyle = '#c44'; ctx.font = 'bold 11px "Source Sans 3", sans-serif';
+    ctx.fillText('模型: y=' + w.toFixed(2) + 'x+' + b.toFixed(2), xToPx(0.3), yToPy(predict(0.3)) - 6);
+  }
+
+  function updateUI() {
+    document.getElementById('train-steps').textContent = steps;
+    document.getElementById('train-loss').textContent = computeLoss().toFixed(4);
+    document.getElementById('train-w').textContent = w.toFixed(4);
+    document.getElementById('train-b').textContent = b.toFixed(4);
+    draw();
+  }
+
+  window.trainStep = function(n) {
+    const lr = parseFloat(document.getElementById('train-lr').value);
+    for (let i = 0; i < n; i++) {
+      const grads = computeGradients();
+      w = w - lr * grads.dw;
+      b = b - lr * grads.db;
+      steps++;
+    }
+    updateUI();
+  };
+
+  window.trainReset = function() {
+    w = Math.random() * 2 - 1;
+    b = Math.random() * 2 - 1;
+    steps = 0;
+    updateUI();
+  };
+
+  document.getElementById('train-lr').addEventListener('input', function() {
+    document.getElementById('train-lr-display').textContent = parseFloat(this.value).toFixed(3);
+  });
+
+  updateUI();
+})();
+</script>
+
+</body>
+</html>

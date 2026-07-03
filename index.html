@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bob 的学习树屋 🌳 从零理解大语言模型</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  /* === 树屋主页专用样式 === */
+
+  /* 覆盖 body 最大宽度，主页需要更宽的布局 */
+  body {
+    max-width: 900px;
+  }
+
+  /* --- 顶部英雄区 --- */
+  .hero {
+    text-align: center;
+    padding: 3rem 0 2rem;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 2rem;
+  }
+  .hero .tree-icon {
+    font-size: 3.5rem;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+  .hero h1 {
+    font-size: 2.2rem;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  .hero .subtitle {
+    font-size: 1.05rem;
+    color: var(--muted);
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    max-width: 560px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* --- 项目简介卡片 --- */
+  .intro-card {
+    margin: 2rem 0;
+    padding: 1.5rem 1.75rem;
+    background: var(--callout-bg);
+    border: 1px solid var(--callout-border);
+    border-radius: 10px;
+  }
+  .intro-card h3 {
+    margin-top: 0;
+    font-size: 1.1rem;
+    color: var(--text);
+  }
+  .intro-card p {
+    margin: 0.6rem 0 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.75;
+  }
+  .intro-card .highlight {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* --- Phase 区块 --- */
+  .phase-section {
+    margin: 2.5rem 0;
+  }
+  .phase-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid var(--rule);
+  }
+  .phase-header .phase-num {
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--faint);
+    white-space: nowrap;
+  }
+  .phase-header .phase-title {
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+  }
+  .phase-header .phase-status {
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25em 0.7em;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .phase-status.done {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  .phase-status.soon {
+    background: #fff3e0;
+    color: #e65100;
+  }
+  @media (prefers-color-scheme: dark) {
+    .phase-status.done {
+      background: #1b3a1e;
+      color: #81c784;
+    }
+    .phase-status.soon {
+      background: #3a2e1b;
+      color: #ffb74d;
+    }
+  }
+
+  .phase-desc {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin: 0.4rem 0 1rem;
+    line-height: 1.55;
+  }
+
+  /* --- 课程列表 --- */
+  .lesson-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.6rem;
+  }
+  .lesson-list li {
+    margin: 0;
+  }
+  .lesson-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    text-decoration: none;
+    transition: border-color 0.2s, background 0.2s;
+    height: 100%;
+  }
+  a.lesson-card {
+    color: inherit;
+    border-bottom: 1px solid var(--rule);
+  }
+  a.lesson-card:hover {
+    border-color: var(--accent);
+    background: var(--callout-bg);
+  }
+  .lesson-card .lesson-num {
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--callout-bg);
+    padding: 0.15em 0.45em;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+  }
+  .lesson-card .lesson-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .lesson-card .lesson-name {
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .lesson-card .lesson-core {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 未完成课程的卡片样式 */
+  .lesson-card.placeholder {
+    opacity: 0.55;
+    cursor: default;
+    pointer-events: none;
+  }
+  .lesson-card.placeholder .lesson-num {
+    color: var(--faint);
+    background: var(--code-bg);
+  }
+  .lesson-card.placeholder .lesson-name {
+    color: var(--faint);
+  }
+  .soon-badge {
+    display: inline-block;
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #e65100;
+    background: #fff3e0;
+    padding: 0.1em 0.5em;
+    border-radius: 10px;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+  }
+  @media (prefers-color-scheme: dark) {
+    .soon-badge {
+      color: #ffb74d;
+      background: #3a2e1b;
+    }
+  }
+
+  /* --- 致谢区 --- */
+  .thanks-section {
+    margin: 3rem 0 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--rule);
+  }
+  .thanks-section h2 {
+    margin-top: 0;
+    font-size: 1.3rem;
+  }
+  .thanks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0;
+  }
+  .thanks-item {
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    font-size: 0.88rem;
+  }
+  .thanks-item .thanks-name {
+    font-family: "Source Sans 3", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .thanks-item .thanks-for {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+    line-height: 1.45;
+  }
+  .thanks-item a {
+    font-size: 0.75rem;
+    border-bottom: none;
+  }
+
+  /* --- 开源信息 --- */
+  .opensource-note {
+    margin: 2rem 0 0;
+    padding: 1.25rem 1.5rem;
+    background: var(--code-bg);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.7;
+  }
+  .opensource-note code {
+    font-size: 0.8rem;
+  }
+
+  /* --- 响应式 --- */
+  @media (max-width: 640px) {
+    .hero {
+      padding: 1.5rem 0 1.25rem;
+    }
+    .hero h1 {
+      font-size: 1.5rem;
+    }
+    .hero .tree-icon {
+      font-size: 2.5rem;
+    }
+    .lesson-list {
+      grid-template-columns: 1fr;
+    }
+    .thanks-grid {
+      grid-template-columns: 1fr;
+    }
+    .phase-header {
+      flex-wrap: wrap;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- ====== 英雄区 ====== -->
+<header class="hero">
+  <div class="tree-icon">🌳</div>
+  <h1>Bob 的学习树屋</h1>
+  <p class="subtitle">
+    从零开始理解大语言模型 —— 一个美术生自学 AI 的公开笔记。<br>
+    每课聚焦一个核心概念，配合可交互的浏览器实验，<br>让抽象的原理变得可见。
+  </p>
+</header>
+
+<!-- ====== 项目简介 ====== -->
+<section class="intro-card">
+  <h3>📖 关于这个项目</h3>
+  <p>
+    这是<span class="highlight">一棵老头树（Bob）</span>自学大语言模型原理的学习成果。我是一名设计/美术背景的学生，
+    最初对 AI 只有一知半解。在自学过程中，我发现大多数教程要么假设读者有计算机学位，
+    要么停留在"调 API"的层面，很少有人在中间搭桥——<span class="highlight">用可视化的方式讲清楚底层原理</span>。
+  </p>
+  <p>
+    于是有了这个项目：一套面向零基础学习者的 LLM 课程。每节课聚焦<strong>一个</strong>核心概念，
+    先讲原理 → 举具体例子 → 再给你一个<strong>浏览器里就能玩的交互实验</strong>。
+    你不需要提前装 Python、不需要 GPU、甚至不需要懂命令行（这些我们会在第 0 课从头教）。
+    打开浏览器就行了。
+  </p>
+  <p>
+    项目持续更新中。目前已完成前置基础（Phase 0）和核心原理（Phase 1），
+    后续将陆续加入 PyTorch 代码实现、训练实战等内容。最终目标是：
+    <strong>让每个认真学完的人都能从零训练一个自己的微型 GPT</strong>。
+  </p>
+</section>
+
+<!-- ====== 课程总览 ====== -->
+<h2 style="margin-top: 2.5rem;">🗺️ 课程总览</h2>
+
+<!-- Phase 0 -->
+<section class="phase-section">
+  <div class="phase-header">
+    <span class="phase-num">Phase 0</span>
+    <span class="phase-title">前置基础 —— 工欲善其事</span>
+    <span class="phase-status done">✓ 已完成</span>
+  </div>
+  <p class="phase-desc">
+    三节课扫清工具障碍。不要求任何编程经验，从打开终端、认识命令行开始。
+    只教后续课程「刚好够用」的 Python，不贪多。
+  </p>
+  <div class="callout" style="margin: 0.75rem 0 1.25rem;">
+    <strong>⚠️ 零基础必读</strong>
+    如果你没有代码基础，并且不会使用 Python，<strong>需要从这三节课开始</strong>。
+    后续 Phase 1 的课程会默认你已经掌握了这些前置知识。跳过它们直接看 Transformer 原理会让你寸步难行。
+  </div>
+  <ul class="lesson-list">
+    <li>
+      <a class="lesson-card" href="lessons/0000-01-command-line.html">
+        <span class="lesson-num">L0.1</span>
+        <span class="lesson-info">
+          <span class="lesson-name">命令行入门</span>
+          <span class="lesson-core">终端是什么？cd / ls / python</span>
+        </span>
+      </a>
+    </li>
+    <li>
+      <a class="lesson-card" href="lessons/0000-02-python-basics-1.html">
+        <span class="lesson-num">L0.2</span>
+        <span class="lesson-info">
+          <span class="lesson-name">Python 速通（上）</span>
+          <span class="lesson-core">变量、列表、for 循环、if 判断</span>
+        </span>
+      </a>
+    </li>
+    <li>
+      <a class="lesson-card" href="lessons/0000-03-python-basics-2.html">
+        <span class="lesson-num">L0.3</span>
+        <span class="lesson-info">
+          <span class="lesson-name">Python 速通（下）</span>
+          <span class="lesson-core">字典、函数、import、读报错</span>
+        </span>
+      </a>
+    </li>
+  </ul>
+</section>
+
+<!-- Phase 1 -->
+<section class="phase-section">
+  <div class="phase-header">
+    <span class="phase-num">Phase 1</span>
+    <span class="phase-title">核心原理 —— Transformer 架构全景</span>
+    <span class="phase-status done">✓ 已完成</span>
+  </div>
+  <p class="phase-desc">
+    这是整个课程的知识骨架。从「LLM 到底在做什么」开始，逐层拆解 Transformer 的每一个组件。
+    每节课配有浏览器内交互实验，让你直观感受抽象概念。
+  </p>
+  <ul class="lesson-list">
+    <li>
+      <a class="lesson-card" href="lessons/0001-llm-lifecycle.html">
+        <span class="lesson-num">L1</span>
+        <span class="lesson-info">
+          <span class="lesson-name">LLM 做什么？</span>
+          <span class="lesson-core">预测下一个 token · 自监督学习</span>
+        </span>
+      </a>
+    </li>
+    <li>
+      <a class="lesson-card" href="lessons/0002-data-preparation.html">
+        <span class="lesson-num">L2</span>
+        <span class="lesson-info">
+          <span class="lesson-name">数据准备</span>
+          <span class="lesson-core">BPE 分词 → Token ID → 滑动窗口</span>
+        </span>
+      </a>
+    </li>
+    <li>
+      <a class="lesson-card" href="lessons/0003-embedding.html">
+        <span class="lesson-num">L3</span>
+        <span class="lesson-info">
+          <span class="lesson-name">词嵌入与位置编码</span>
+          <span class="lesson-core">Embedding 查表 · 正弦位置编码</span>
+        </span>
+      </a>
+    </li>
+    <li>
+      <a class="lesson-card" href="lessons/0004-attention.html">
+        <span class="lesson-num">L4</span>
+        <span class="lesson-info">
+          <span class="lesson-name">注意力机制</span>
+          <span class="lesson-core">Q/K/V · Softmax · 因果遮罩</span>
+        </span>
+      </a>
+    </li>
+    <li>
+      <a class="lesson-card" href="lessons/0005-feedforward-residual.html">
+        <span class="lesson-num">L5</span>
+        <span class="lesson-info">
+          <span class="lesson-name">Transformer Block</span>
+          <span class="lesson-core">多头注意力 + FFN + 残差 + LN</span>
+        </span>
+      </a>
+    </li>
+    <li>
+      <a class="lesson-card" href="lessons/0006-training-loop.html">
+        <span class="lesson-num">L6</span>
+        <span class="lesson-info">
+          <span class="lesson-name">训练循环</span>
+          <span class="lesson-core">交叉熵 · 梯度下降 · 反向传播</span>
+        </span>
+      </a>
+    </li>
+    <li>
+      <a class="lesson-card" href="lessons/0007-gpt-assembly.html">
+        <span class="lesson-num">L7</span>
+        <span class="lesson-info">
+          <span class="lesson-name">GPT 组装与生成</span>
+          <span class="lesson-core">完整架构 · 自回归解码 · 采样</span>
+        </span>
+      </a>
+    </li>
+  </ul>
+</section>
+
+<!-- Phase 2 -->
+<section class="phase-section">
+  <div class="phase-header">
+    <span class="phase-num">Phase 2</span>
+    <span class="phase-title">代码实现 —— 用 PyTorch 逐组件实现 GPT</span>
+    <span class="phase-status soon">🔜 即将更新</span>
+  </div>
+  <p class="phase-desc">
+    把 Phase 1 的「概念理解」变成「能跑通的代码」。从零写出一个 ~150 行的 GPT-2 小型版，
+    包含 MultiHeadAttention、TransformerBlock、GPTModel 三个核心类。
+  </p>
+  <ul class="lesson-list">
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L8</span>
+        <span class="lesson-info">
+          <span class="lesson-name">PyTorch 基础</span>
+          <span class="lesson-core">张量 · nn.Linear · autograd</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L9</span>
+        <span class="lesson-info">
+          <span class="lesson-name">实现 Embedding + 位置编码</span>
+          <span class="lesson-core">nn.Embedding · sin/cos 编码</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L10</span>
+        <span class="lesson-info">
+          <span class="lesson-name">实现注意力机制</span>
+          <span class="lesson-core">Q/K/V 投影 · 因果遮罩 · 多头</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L11</span>
+        <span class="lesson-info">
+          <span class="lesson-name">实现 Transformer Block</span>
+          <span class="lesson-core">Attention + FFN + 残差 + LN</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L12</span>
+        <span class="lesson-info">
+          <span class="lesson-name">组装完整 GPT-2 模型</span>
+          <span class="lesson-core">GPTModel 类 · 参数统计 · 前向测试</span>
+        </span>
+      </span>
+    </li>
+  </ul>
+</section>
+
+<!-- Phase 3 -->
+<section class="phase-section">
+  <div class="phase-header">
+    <span class="phase-num">Phase 3</span>
+    <span class="phase-title">训练实战 —— 真正训练一个模型</span>
+    <span class="phase-status soon">🔜 即将更新</span>
+  </div>
+  <p class="phase-desc">
+    有了模型代码，下一步是喂数据、跑训练、看 loss 下降。使用免费 GPU（Colab / AutoDL），
+    不需要自己的硬件。产出是一个自己训练的、能生成中文文本的微型 GPT。
+  </p>
+  <ul class="lesson-list">
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L13</span>
+        <span class="lesson-info">
+          <span class="lesson-name">数据准备实战</span>
+          <span class="lesson-core">文本 → DataLoader · 训练/验证集</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L14</span>
+        <span class="lesson-info">
+          <span class="lesson-name">训练循环实战</span>
+          <span class="lesson-core">train/eval · 学习率调度 · checkpoint</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L15</span>
+        <span class="lesson-info">
+          <span class="lesson-name">云端训练</span>
+          <span class="lesson-core">Colab 免费 GPU · 监控 loss 曲线</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L16</span>
+        <span class="lesson-info">
+          <span class="lesson-name">文本生成实战</span>
+          <span class="lesson-core">加载 checkpoint · Temperature 采样</span>
+        </span>
+      </span>
+    </li>
+  </ul>
+</section>
+
+<!-- Phase 4 -->
+<section class="phase-section">
+  <div class="phase-header">
+    <span class="phase-num">Phase 4</span>
+    <span class="phase-title">理解与优化 —— 从「能跑」到「懂为什么」</span>
+    <span class="phase-status soon">🔜 即将更新</span>
+  </div>
+  <p class="phase-desc">
+    训练跑通了，但参数怎么算出来的？为什么这样设计？怎么让训练更快更好？
+    这个阶段培养技术判断力。
+  </p>
+  <ul class="lesson-list">
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L17</span>
+        <span class="lesson-info">
+          <span class="lesson-name">参数计算与模型缩放</span>
+          <span class="lesson-core">参数量公式 · Chinchilla 定律</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L18</span>
+        <span class="lesson-info">
+          <span class="lesson-name">训练技巧</span>
+          <span class="lesson-core">warmup · 梯度裁剪 · 混合精度</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">L19</span>
+        <span class="lesson-info">
+          <span class="lesson-name">评估方法</span>
+          <span class="lesson-core">Perplexity · Benchmark · 数据污染</span>
+        </span>
+      </span>
+    </li>
+  </ul>
+</section>
+
+<!-- Phase 5 -->
+<section class="phase-section">
+  <div class="phase-header">
+    <span class="phase-num">Phase 5</span>
+    <span class="phase-title">进阶方向 —— 按兴趣选修</span>
+    <span class="phase-status soon">🔜 即将更新</span>
+  </div>
+  <p class="phase-desc">
+    通向「离线陪伴机器人」长远目标的延伸路线。包含微调对齐、量化部署、多模态、Agent 四个方向，
+    每个方向 2~3 课，按兴趣选学。
+  </p>
+  <ul class="lesson-list">
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">A</span>
+        <span class="lesson-info">
+          <span class="lesson-name">微调与对齐</span>
+          <span class="lesson-core">SFT · RLHF/DPO · LoRA/QLoRA</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">B</span>
+        <span class="lesson-info">
+          <span class="lesson-name">量化与部署</span>
+          <span class="lesson-core">INT8/INT4 · llama.cpp · 本地推理</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">C</span>
+        <span class="lesson-info">
+          <span class="lesson-name">多模态</span>
+          <span class="lesson-core">CLIP · Diffusion+DiT · 语音对话</span>
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="lesson-card placeholder">
+        <span class="lesson-num">D</span>
+        <span class="lesson-info">
+          <span class="lesson-name">Agent 与工具使用</span>
+          <span class="lesson-core">Function Calling · RAG · Memory</span>
+        </span>
+      </span>
+    </li>
+  </ul>
+</section>
+
+<!-- ====== 致谢 ====== -->
+<section class="thanks-section">
+  <h2>🙏 致谢</h2>
+  <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">
+    这个项目站在许多开源作者和社区的肩上。以下排名不分先后：
+  </p>
+
+  <div class="thanks-grid">
+
+    <div class="thanks-item">
+      <div class="thanks-name">Sebastian Raschka</div>
+      <div class="thanks-for">
+        《Build a Large Language Model (From Scratch)》作者。本书是本课程的核心教材，
+        整套 Phase 1 的内容架构和 Phase 2-3 的代码路线都源于此。
+      </div>
+      <a href="https://github.com/rasbt/LLMs-from-scratch" target="_blank" rel="noopener">GitHub: LLMs-from-scratch (63.7k ⭐)</a>
+    </div>
+
+    <div class="thanks-item">
+      <div class="thanks-name">Datawhale 开源社区</div>
+      <div class="thanks-for">
+        国内最大的 AI 开源学习社区。提供了 LLMs-from-scratch 的中文翻译、组队学习资源和
+        大量答疑，对中文学习者极其友好。
+      </div>
+      <a href="https://github.com/datawhalechina/llms-from-scratch-cn" target="_blank" rel="noopener">GitHub: llms-from-scratch-cn</a>
+    </div>
+
+    <div class="thanks-item">
+      <div class="thanks-name">MLNLP-World</div>
+      <div class="thanks-for">
+        LLMs-from-scratch 的另一个中文翻译版本，代码注释和说明均已汉化，
+        是中文学习者重要的参考资源。
+      </div>
+      <a href="https://github.com/MLNLP-World/LLMs-from-scratch-CN" target="_blank" rel="noopener">GitHub: LLMs-from-scratch-CN</a>
+    </div>
+
+    <div class="thanks-item">
+      <div class="thanks-name">Jay Alammar</div>
+      <div class="thanks-for">
+        《The Illustrated Transformer》和《The Illustrated GPT-2》作者。
+        他的可视化图解极大影响了本课程「用视觉解释抽象概念」的教学风格。
+      </div>
+      <a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">Illustrated Transformer</a>
+    </div>
+
+    <div class="thanks-item">
+      <div class="thanks-name">李宏毅 (Hung-yi Lee)</div>
+      <div class="thanks-for">
+        台湾大学《生成式人工智能导论》(2024) 授课教师。中文授课、零基础友好，
+        是本课程视频资源的重要参考。
+      </div>
+      <a href="https://speech.ee.ntu.edu.tw/~hylee/genai/2024-spring.html" target="_blank" rel="noopener">课程主页</a>
+    </div>
+
+    <div class="thanks-item">
+      <div class="thanks-name">waylandzhang</div>
+      <div class="thanks-for">
+        《Transformer 架构：从直觉到实现》作者。20 万字的 Transformer 手稿，
+        配合视频使用，是中文社区少有的系统性 Transformer 教程。
+      </div>
+      <a href="https://github.com/waylandzhang/llm-transformer-book" target="_blank" rel="noopener">GitHub: llm-transformer-book</a>
+    </div>
+
+    <div class="thanks-item">
+      <div class="thanks-name">Andrej Karpathy</div>
+      <div class="thanks-for">
+        "Let's build GPT from scratch" 视频教程和 nanoGPT 项目。
+        他「从零构建」的教学哲学深刻影响了本课程的设计理念。
+      </div>
+      <a href="https://github.com/karpathy/nanoGPT" target="_blank" rel="noopener">GitHub: nanoGPT</a>
+    </div>
+
+    <div class="thanks-item">
+      <div class="thanks-name">所有 B 站知识区 UP 主</div>
+      <div class="thanks-for">
+        许多 UP 主制作了高质量的 LLM 中文讲解视频、Transformer 动画、
+        BPE 分词演示等，为零基础学习者降低了入门门槛。
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ====== 开源信息 ====== -->
+<section class="opensource-note">
+  <p style="margin: 0 0 0.5rem; font-weight: 600; color: var(--text);">
+    👐 本项目开源 —— 欢迎贡献与分享
+  </p>
+  <p style="margin: 0;">
+    所有课程均为纯静态 HTML 文件，无需安装任何依赖。<br>
+    克隆到本地后，直接用浏览器打开 <code>index.html</code> 即可浏览全部内容。<br>
+    如果你发现有错误或想贡献新课程，欢迎提 Issue / PR。
+  </p>
+</section>
+
+<!-- ====== 页脚 ====== -->
+<footer class="lesson-footer" style="margin-top: 2.5rem; text-align: center;">
+  <p style="margin: 0;">
+    🌳 Bob 的学习树屋 · 从零理解大语言模型<br>
+    托管于 <a href="https://bob-llm-treehouse.netlify.app" target="_blank" rel="noopener">Netlify</a> ·
+    灵感来自 <a href="https://github.com/rasbt/LLMs-from-scratch" target="_blank" rel="noopener">LLMs-from-scratch</a>
+  </p>
+</footer>
+
+</body>
+</html>
