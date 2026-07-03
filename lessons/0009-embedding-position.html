@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第9课 · 实现 Embedding + 位置编码</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  /* 位置编码热力图 */
+  .heatmap-wrap {
+    margin: 1.25rem 0;
+    overflow-x: auto;
+  }
+  .heatmap-wrap table {
+    width: auto;
+    margin: 0;
+    border-collapse: collapse;
+  }
+  .heatmap-wrap td {
+    width: 1.5rem;
+    height: 1.2rem;
+    border: none;
+    padding: 0;
+  }
+
+  /* Embedding 查表演示 */
+  .lookup-demo {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    margin: 1rem 0;
+    align-items: flex-start;
+  }
+  .lookup-table {
+    border-collapse: collapse;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.75rem;
+  }
+  .lookup-table td {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--rule);
+    text-align: center;
+    min-width: 2.8rem;
+    transition: background 0.2s;
+  }
+  .lookup-table th {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--rule);
+    text-align: center;
+    background: var(--code-bg);
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .lookup-table .row-hl { background: #fff3cd; color: #856404; }
+  .lookup-table .vec-hl { background: #d4edda; color: #1b5e20; }
+  @media (prefers-color-scheme: dark) {
+    .lookup-table .row-hl { background: #4a3a0a; color: #ffd54f; }
+    .lookup-table .vec-hl { background: #1b3a1b; color: #a5d6a7; }
+  }
+
+  /* 输入组装演示 */
+  .assembly-viz {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    justify-content: center;
+    margin: 1rem 0;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.78rem;
+  }
+  .asm-box {
+    padding: 0.6rem 0.8rem;
+    border: 2px solid var(--rule);
+    border-radius: 8px;
+    background: var(--bg);
+    text-align: center;
+    min-width: 3rem;
+  }
+  .asm-box.tok { border-color: #42a5f5; }
+  .asm-box.pos { border-color: #ef5350; }
+  .asm-box.out { border-color: #66bb6a; background: #e8f5e9; }
+
+  /* sin/cos 公式展示 */
+  .formula-block {
+    margin: 1rem 0;
+    padding: 1rem 1.25rem;
+    background: var(--code-bg);
+    border-radius: 8px;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 2;
+  }
+
+  /* 代码标注 */
+  .code-annotated {
+    margin: 1rem 0;
+  }
+  .code-annotated .line {
+    display: flex;
+    gap: 0.75rem;
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+  }
+  .code-annotated .line .code {
+    flex: 0 0 auto;
+    min-width: 380px;
+    color: var(--text);
+  }
+  .code-annotated .line .note {
+    color: var(--muted);
+    font-family: "Source Serif 4", "Noto Serif CJK SC", serif;
+    font-size: 0.78rem;
+  }
+
+  @media (max-width: 640px) {
+    .code-annotated .line { flex-direction: column; gap: 0.1rem; }
+    .code-annotated .line .code { min-width: auto; }
+    .lookup-demo { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<a href="../index.html" class="back-home" title="返回树屋总览">← 树屋总览</a>
+
+<h1>🏗️ 第9课 · 实现 Embedding + 位置编码</h1>
+
+<!-- ====== 导入 ====== -->
+<h2>从「看懂」到「写出」：第一行 GPT 代码</h2>
+
+<p>
+  在 L3 你理解了：<strong>Embedding = 查表</strong>，<strong>位置编码 = 给每个位置打指纹</strong>。
+  在 L8 你学会了 PyTorch 的基础工具：张量、<code>nn.Linear</code>、<code>nn.Embedding</code>。
+</p>
+
+<p>
+  这节课把两者对接起来——<strong>把 L3 的概念翻译成能跑的 PyTorch 代码</strong>。
+  这是 GPT 模型的<strong>输入层</strong>，也就是数据进入 Transformer 的第一道门。
+</p>
+
+<div class="pipeline">
+  <div class="stage"><div class="label">Token IDs</div><div class="sub">[42, 318, 7]</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">Token Embedding</div><div class="sub">查大表，每行768个数</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">+ 位置编码</div><div class="sub">加上「第几个位置」的指纹</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">Dropout</div><div class="sub">随机关掉一些（防过拟合）</div></div>
+  <span class="arrow">→</span>
+  <div class="stage"><div class="label">送入 Transformer</div><div class="sub">(L10 见)</div></div>
+</div>
+
+<!-- ====== 概念一：nn.Embedding ====== -->
+<h2>概念一：nn.Embedding —— 把「查表」写成代码</h2>
+
+<h3>回顾 L3：Embedding 到底是什么？</h3>
+
+<p>
+  假设词表有 50257 个 token，每个 token 用一个 768 维的向量表示。
+  整个 Embedding 层就是一张 <strong>50257 × 768 的大表格</strong>：
+</p>
+
+<ul>
+  <li>每一行是一个 token 的「语义向量」</li>
+  <li>输入一个 token ID → 取出对应的那一行 → 得到 768 个数字</li>
+  <li>这些数字一开始是<strong>随机初始化的</strong>，在训练中逐渐学会语义（「猫」和「狗」的向量越来越近）</li>
+</ul>
+
+<p>在 PyTorch 里，这张大表就是一行代码：</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">embed = nn.Embedding(50257, 768)</span><span class="note">创建一张 50257 行 × 768 列的大表</span></div>
+  <div class="line"><span class="code"># embed.weight  shape → (50257, 768)</span><span class="note">.weight 就是这张表的所有数字，50257 行，每行 768 个</span></div>
+</div>
+
+<p>查表操作也很简单——把 token ID 张量喂进去就行：</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">token_ids = torch.tensor([[42, 318, 7]])</span><span class="note">一个 batch，1 句话，3 个 token</span></div>
+  <div class="line"><span class="code">x = embed(token_ids)</span><span class="note">查表：取第 42、318、7 行</span></div>
+  <div class="line"><span class="code"># x.shape  →  (1, 3, 768)</span><span class="note">1 句话 × 3 个词 × 每个 768 维</span></div>
+</div>
+
+<div class="callout">
+  <strong>🔗 回到 L2</strong>
+  这些 token ID（42, 318, 7）不是凭空来的——它们是 L2 讲的 BPE 分词器的输出。
+  原始文本 → BPE 分词 → Token ID → <strong>这里</strong> → Embedding 向量。
+</div>
+
+<!-- 交互：Embedding 查表演示 -->
+<div class="experiment" style="margin:1.5rem 0;border:2px solid var(--rule);border-radius:10px;padding:1.25rem;background:var(--code-bg);">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：Embedding 查表</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    下面是迷你版的 Embedding 表（10 个词 × 每个 4 维）。点击任意 token，看它对应哪一行、查出了什么向量。
+  </p>
+  <div class="lookup-demo">
+    <div>
+      <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.4rem;">📋 输入 token IDs（点击查看）</div>
+      <div id="lk-tokens"></div>
+      <div style="margin-top:0.4rem;font-size:0.78rem;color:var(--muted);">当前选中：<span id="lk-selected" style="font-weight:600;color:var(--text);">—</span></div>
+    </div>
+    <div>
+      <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.4rem;">🗄️ Embedding 表 (10×4)</div>
+      <div id="lk-table"></div>
+    </div>
+    <div>
+      <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.4rem;">📤 查出的向量</div>
+      <div id="lk-vector" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:0.82rem;padding:0.5rem;background:var(--bg);border-radius:4px;min-width:10rem;min-height:2rem;color:var(--muted);">点击 token 查看</div>
+    </div>
+  </div>
+</div>
+
+<p>
+  这就是 <code>nn.Embedding</code> 的全部工作。它不做任何计算——<strong>就是查表</strong>。
+  真正的「理解」发生在训练过程中，表格里的数字被梯度下降慢慢调整，使得语义相近的词向量也相近。
+</p>
+
+<!-- ====== 概念二：正弦位置编码 ====== -->
+<h2>概念二：正弦位置编码 —— 从公式到代码</h2>
+
+<h3>为什么需要位置编码？</h3>
+
+<p>
+  回到 L3 的核心洞察：<strong>Embedding 只管「什么词」，不管「在哪个位置」</strong>。
+  「我喜欢猫」和「猫喜欢我」——三个词的 Embedding 向量完全一样，但意思完全不同。
+</p>
+
+<p>
+  位置编码就是给每个位置的向量加上一个<strong>独一无二的「位置指纹」</strong>，
+  让模型能区分「第 1 个词」和「第 3 个词」。
+</p>
+
+<h3>正弦位置编码的公式</h3>
+
+<p>
+  GPT 用的不是唯一的方式，但<strong>正弦位置编码</strong>是最经典、最优雅的方式。
+  它用 sin 和 cos 函数生成位置编码，不需要训练，直接算：
+</p>
+
+<div class="formula-block">
+  PE(pos, 2i) &nbsp; &nbsp; &nbsp;= sin( pos / 10000<sup>2i/d<sub>model</sub></sup> )<br>
+  PE(pos, 2i+1) = cos( pos / 10000<sup>2i/d<sub>model</sub></sup> )
+</div>
+
+<p>这个公式看起来吓人，拆开来就很简单：</p>
+
+<ul>
+  <li><strong>pos</strong>：位置编号（0, 1, 2, 3, …）——这是第几个词</li>
+  <li><strong>i</strong>：维度对的编号（0, 1, 2, …）——向量的第几个「位置对」</li>
+  <li><strong>d<sub>model</sub></strong>：向量的总维度数（比如 768）</li>
+  <li><strong>关键设计</strong>：偶数维度（2i）用 sin，奇数维度（2i+1）用 cos</li>
+  <li><strong>10000<sup>2i/d</sup></strong>：控制波浪频率——越靠前的维度对，波浪越快；越靠后，波浪越慢</li>
+</ul>
+
+<div class="callout">
+  <strong>💡 为什么用 sin/cos？</strong><br>
+  两个好处：<br>
+  1. <strong>值域稳定</strong>：sin/cos 输出永远在 [-1, 1] 之间，不会像可学习参数那样出现极端值<br>
+  2. <strong>相对位置可外推</strong>：sin(a+b) = sin(a)cos(b) + cos(a)sin(b)——模型可以从中学到两个位置之间的<strong>相对距离</strong>，而不只是绝对位置。这意味训练时只见过 1024 长度的序列，推理时可能处理更长的
+</div>
+
+<h3>把公式变成代码</h3>
+
+<p>现在把上面的公式逐行翻译成 Python（PyTorch 版）：</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">def sinusoidal_position_encoding(seq_len, d_model):</span><span class="note">输入：序列长度（几个词）和向量维度</span></div>
+  <div class="line"><span class="code">    pe = torch.zeros(seq_len, d_model)</span><span class="note">先创建一张全 0 的「空表」，shape=(seq_len, d_model)</span></div>
+  <div class="line"><span class="code">    position = torch.arange(seq_len).unsqueeze(1)</span><span class="note">位置编号：[[0],[1],[2],…] shape=(seq_len, 1)</span></div>
+  <div class="line"><span class="code">    div_term = torch.arange(0, d_model, 2)</span><span class="note">生成偶数索引：[0, 2, 4, 6, …] 对应公式里的 2i</span></div>
+  <div class="line"><span class="code">    div_term = div_term.float() * (-math.log(10000.0) / d_model)</span><span class="note">计算 -(2i/d)×ln(10000)，为 exp 做准备</span></div>
+  <div class="line"><span class="code">    div_term = torch.exp(div_term)</span><span class="note">exp(-2i/d × ln(10000)) = 10000^(-2i/d) = 分母</span></div>
+  <div class="line"><span class="code">    pe[:, 0::2] = torch.sin(position * div_term)</span><span class="note">所有偶数位置（0,2,4,…）填 sin(pos / 分母)</span></div>
+  <div class="line"><span class="code">    pe[:, 1::2] = torch.cos(position * div_term)</span><span class="note">所有奇数位置（1,3,5,…）填 cos(pos / 分母)</span></div>
+  <div class="line"><span class="code">    return pe</span><span class="note">返回位置编码矩阵，shape=(seq_len, d_model)</span></div>
+</div>
+
+<div class="callout">
+  <strong>🔗 回到 L3</strong>
+  在 L3 的位置编码热力图中，你看到过这张图的最终形态——横条纹（低频维度）和竖条纹（高频维度）。
+  上面这几行代码，就是那幅热力图的「生成器」。
+</div>
+
+<!-- 交互：位置编码热力图 -->
+<div class="experiment" style="margin:1.5rem 0;border:2px solid var(--rule);border-radius:10px;padding:1.25rem;background:var(--code-bg);">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：正弦位置编码热力图</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    用 JavaScript 重现上述代码逻辑，实时生成位置编码矩阵。<strong>横轴 = 向量维度（0~63），纵轴 = 位置（0~31）</strong>。
+    颜色越亮 = 值越大（接近+1），越暗 = 值越小（接近-1）。
+  </p>
+  <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;margin-bottom:1rem;">
+    <label style="font-size:0.78rem;font-weight:600;">序列长度:</label>
+    <input type="range" id="pe-seq" min="4" max="64" value="32" step="4" oninput="renderHeatmap()">
+    <span id="pe-seq-display" style="font-size:0.78rem;font-family:'JetBrains Mono',Consolas,monospace;">32</span>
+    <label style="font-size:0.78rem;font-weight:600;margin-left:0.5rem;">维度:</label>
+    <input type="range" id="pe-dim" min="8" max="128" value="64" step="8" oninput="renderHeatmap()">
+    <span id="pe-dim-display" style="font-size:0.78rem;font-family:'JetBrains Mono',Consolas,monospace;">64</span>
+  </div>
+  <div style="overflow-x:auto;" id="pe-heatmap"></div>
+  <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem;">
+    🧐 观察：左侧维度变化快（细条纹，高频sin/cos），右侧维度变化慢（粗条纹，低频sin/cos）。
+    这就是「不同维度对携带不同频率的位置信息」——低频告诉我们大致的区域，高频告诉我们精确的位置。
+  </p>
+</div>
+
+<!-- ====== 概念三：可学习位置编码 ====== -->
+<h2>概念三：可学习位置编码 —— 另一种思路</h2>
+
+<p>
+  正弦编码很优雅，但<strong>GPT-2 实际上用的不是它</strong>——GPT-2 用的是<strong>可学习位置编码（Learnable Position Embedding）</strong>：
+</p>
+
+<ul>
+  <li>不靠 sin/cos 公式计算，而是直接把位置编码当成<strong>可以训练的 Embedding 表</strong></li>
+  <li>初始随机，在训练中和词嵌入一起被梯度下降优化</li>
+  <li>本质上就是另一个 <code>nn.Embedding</code></li>
+</ul>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">pos_embed = nn.Embedding(max_seq_len, d_model)</span><span class="note">位置也是 Embedding！max_seq_len 行 × d_model 列</span></div>
+  <div class="line"><span class="code"># 例如 max_seq_len=1024, d_model=768</span><span class="note">能处理最长 1024 个 token 的序列</span></div>
+  <div class="line"><span class="code">pos_ids = torch.arange(seq_len)</span><span class="note">位置 ID：[0, 1, 2, …, seq_len-1]</span></div>
+  <div class="line"><span class="code">pos_emb = pos_embed(pos_ids)</span><span class="note">查表：位置 0 → 第 0 行，位置 1 → 第 1 行...</span></div>
+  <div class="line"><span class="code"># pos_emb.shape  →  (seq_len, d_model)</span><span class="note">和 token embedding 形状完全一样</span></div>
+</div>
+
+<table>
+  <tr><th></th><th>正弦位置编码</th><th>可学习位置编码</th></tr>
+  <tr><td>需要训练吗？</td><td>❌ 不需要（直接算）</td><td>✅ 需要（随训练更新）</td></tr>
+  <tr><td>能外推到更长序列？</td><td>✅ 理论上可以</td><td>❌ 不行（最多到 max_seq_len）</td></tr>
+  <tr><td>效果</td><td>够用，但非最优</td><td>略好（训练适配数据）</td></tr>
+  <tr><td>GPT-2 用哪个？</td><td>—</td><td>✅ 可学习</td></tr>
+  <tr><td>实现复杂度</td><td>需要写 sin/cos 函数</td><td>一行 nn.Embedding</td></tr>
+</table>
+
+<p>
+  本课程两种都教你。实际项目中 GPT-2 用可学习编码，但了解正弦编码有助于理解「位置信息如何被编码成向量」。
+</p>
+
+<!-- ====== 概念四：组装输入层 ====== -->
+<h2>概念四：组装 —— token_emb + pos_emb</h2>
+
+<h3>加法，不是拼接</h3>
+
+<p>
+  有了词嵌入和位置编码，下一步就是把它们<strong>合并</strong>起来。
+  最常见的做法是：
+</p>
+
+<blockquote>
+  <strong>x = token_embedding + position_embedding</strong>
+</blockquote>
+
+<p>
+  <strong>等等，为什么是加法？</strong> 如果 tok_emb 的 shape 是 (seq_len, 768)，pos_emb 的 shape 也是 (seq_len, 768)，
+  加法就是对应位置的数字直接相加。但这不会把「词信息」和「位置信息」搞混吗？
+</p>
+
+<p>
+  不会——因为<strong>加法把两种信息混合在了同一个向量的不同维度上</strong>。
+  在后续的 Transformer 层处理中，模型通过训练学会了：
+  「这些维度模式来自词义，那些模式来自位置」。
+</p>
+
+<p>
+  为什么不用拼接（concatenation）？拼接会得到 (seq_len, 1536) 的向量，维度翻倍，
+  后面所有层的参数量也会翻倍。加法<strong>不改变维度，且效果等价</strong>——这是反复工程验证后的最优选择。
+</p>
+
+<!-- 交互：组装演示 -->
+<div class="experiment" style="margin:1.5rem 0;border:2px solid var(--rule);border-radius:10px;padding:1.25rem;background:var(--code-bg);">
+  <h4 style="margin:0 0 0.5rem;font-size:0.95rem;">🔬 动手试试：tok_emb + pos_emb 组装演示</h4>
+  <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1rem;">
+    模拟 3 个位置的向量组装。调整每个维度的值，看加法如何把词信息和位置信息融合。Dropout 随机把一些值清零——模拟训练中的正则化。
+  </p>
+  <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;margin-bottom:0.8rem;">
+    <label style="font-size:0.78rem;font-weight:600;">Dropout 概率:</label>
+    <input type="range" id="do-rate" min="0" max="0.5" step="0.05" value="0.1" oninput="renderAssembly()">
+    <span id="do-rate-display" style="font-size:0.78rem;font-family:'JetBrains Mono',Consolas,monospace;">0.10</span>
+    <button onclick="renderAssembly()" style="padding:0.25rem 0.6rem;font-size:0.78rem;border:1px solid var(--accent);border-radius:4px;background:var(--bg);color:var(--accent);cursor:pointer;">🔄 重新随机</button>
+  </div>
+  <div id="assembly-display"></div>
+</div>
+
+<h3>Dropout：防止「死记硬背」</h3>
+
+<p>
+  Dropout 是训练中的一个简单技巧：<strong>随机把一些值设为零</strong>。
+  在输入层（Embedding 之后）通常加一个 Dropout(0.1)：
+</p>
+
+<div class="code-annotated">
+  <div class="line"><span class="code">dropout = nn.Dropout(0.1)</span><span class="note">以 10% 的概率，随机把某些值设为零</span></div>
+  <div class="line"><span class="code">x = dropout(tok_emb + pos_emb)</span><span class="note">每轮训练随机关掉 10% 的值——防止模型依赖特定位置</span></div>
+</div>
+
+<p>
+  为什么有效？想象你在背课文——如果每次读的时候随机遮住一些字，你就被迫理解<strong>整体意思</strong>而不是死记笔画。
+  Dropout 强迫模型学习<strong>更鲁棒的表示</strong>，不能依赖任何一个特定的值。训练完后推理时，Dropout 自动关闭。
+</p>
+
+<!-- ====== 完整代码 ====== -->
+<h2>完整代码：GPT 的输入处理层</h2>
+
+<p>下面是把所有概念拼在一起的完整代码——这是 GPT 模型的「第一段」：</p>
+
+<pre><code>import torch
+import torch.nn as nn
+import math
+
+class GPTInputLayer(nn.Module):
+    """GPT 的输入处理层：Token ID → 词嵌入 + 位置编码 → Dropout"""
+
+    def __init__(self, vocab_size=50257, d_model=768, max_seq_len=1024, dropout=0.1):
+        super().__init__()
+
+        # --- 词嵌入：一张 50257 × 768 的大表 ---
+        self.tok_embed = nn.Embedding(vocab_size, d_model)
+
+        # --- 位置编码：一张 1024 × 768 的表（可学习） ---
+        self.pos_embed = nn.Embedding(max_seq_len, d_model)
+
+        # --- Dropout：防止过拟合 ---
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, token_ids):
+        """
+        token_ids: shape (batch, seq_len)，例如 (2, 512) 表示 2 句话，每句 512 个 token
+
+        返回：shape (batch, seq_len, d_model) 即 (2, 512, 768)
+        """
+        batch_size, seq_len = token_ids.shape
+
+        # Step 1: 查词嵌入表
+        tok_emb = self.tok_embed(token_ids)           # (batch, seq_len, d_model)
+
+        # Step 2: 查位置编码表
+        pos_ids = torch.arange(seq_len)                # [0, 1, 2, ..., seq_len-1]
+        pos_emb = self.pos_embed(pos_ids)              # (seq_len, d_model)
+
+        # Step 3: 加法融合 ← 核心！词信息 + 位置信息
+        x = tok_emb + pos_emb                          # (batch, seq_len, d_model)
+
+        # Step 4: Dropout（只在训练时生效，推理时自动跳过）
+        x = self.dropout(x)
+
+        return x
+
+
+# ===== 测试：随机输入，检查输出 shape =====
+model = GPTInputLayer()
+
+# 模拟一个 batch：2 句话，每句 512 个 token
+dummy_input = torch.randint(0, 50257, (2, 512))
+
+# 前向传播
+output = model(dummy_input)
+
+print(f"输入 shape: {dummy_input.shape}")   # (2, 512)     — Token ID
+print(f"输出 shape: {output.shape}")          # (2, 512, 768) — 每个 token 变成 768 维向量
+print(f"参数量: {sum(p.numel() for p in model.parameters()):,}")
+
+# 参数量估算：
+# tok_embed: 50257 × 768 = 38,597,376
+# pos_embed: 1024 × 768  =    786,432
+# 合计 ≈ 39,383,808 ≈ 39.4M</code></pre>
+
+<div class="callout">
+  <strong>📊 参数量观察</strong>
+  仅输入层就占了约 <strong>39M</strong> 个参数，其中绝大部分（38.6M）是词嵌入表。
+  对于 GPT-2 small（总参数 124M），输入层占了 <strong>约 1/3</strong> 的参数！
+  这说明「表示词汇」本身就是一个巨大的投资。
+</div>
+
+<!-- ====== 总结 ====== -->
+<hr>
+<h2>✅ 这节课你学会了</h2>
+
+<table>
+  <tr><th>概念</th><th>PyTorch 代码</th><th>对应的 Phase 1 知识</th></tr>
+  <tr><td>词嵌入</td><td><code>nn.Embedding(vocab, dim)</code></td><td>L3：Embedding = 大查找表</td></tr>
+  <tr><td>正弦位置编码</td><td><code>sin(pos / 10000<sup>2i/d</sup>)</code></td><td>L3：位置指纹</td></tr>
+  <tr><td>可学习位置编码</td><td><code>nn.Embedding(max_len, dim)</code></td><td>GPT-2 实际用的方式</td></tr>
+  <tr><td>输入组装</td><td><code>x = tok_emb + pos_emb</code></td><td>加法融合，不改变维度</td></tr>
+  <tr><td>Dropout</td><td><code>nn.Dropout(0.1)</code></td><td>L6：防过拟合</td></tr>
+</table>
+
+<p>
+  现在你拥有了 GPT 输入层的完整代码。<strong>数据从 token ID 变成了携带位置信息的 768 维向量</strong>，
+  接下来要送入 12 层 Transformer Block 进行处理——那就是 L10 和 L11 的内容。
+</p>
+
+<p style="color:var(--muted);font-size:0.9rem;">
+  ⚠️ 上述代码需要 Python + PyTorch 环境。建议在 <a href="https://colab.research.google.com/" target="_blank" rel="noopener">Google Colab</a>（免费 GPU）中运行。
+</p>
+
+<!-- ====== 导航 ====== -->
+<nav class="lesson-nav">
+  <a href="0008-pytorch-basics.html">← 上一课：PyTorch 基础</a>
+  <span style="color:var(--faint);">下一课：实现注意力机制（即将更新）→</span>
+</nav>
+
+<footer class="lesson-footer">
+  <p>
+    第 9 课 · 实现 Embedding + 位置编码 —— GPT 输入层的完整代码实现。
+    39M 参数的输入层，是模型理解语言的第一道门。有问题随时回来问 Bib。
+  </p>
+</footer>
+
+<!-- ====== 交互脚本 ====== -->
+<script>
+// ========== Embedding 查表演示 ==========
+(function() {
+  const vocab = ['我', '喜欢', '猫', '吃', '鱼', '在', '公园', '跑步', '天气', '好'];
+  const tableData = [
+    [ 0.21, -0.45,  0.83, -0.12],
+    [-0.67,  0.34, -0.21,  0.75],
+    [ 0.92, -0.18,  0.44, -0.56],
+    [-0.33,  0.61, -0.77,  0.29],
+    [ 0.55, -0.82,  0.13, -0.41],
+    [-0.19,  0.48, -0.63,  0.87],
+    [ 0.74, -0.31,  0.56, -0.22],
+    [-0.88,  0.15, -0.49,  0.66],
+    [ 0.37, -0.54,  0.71, -0.93],
+    [-0.42,  0.79, -0.25,  0.38]
+  ];
+
+  const inputTokens = [1, 3, 0, 9];  // "喜欢 吃 我 好"
+
+  let selectedIdx = -1;
+
+  function renderEmbeddingDemo() {
+    // Token buttons
+    let tokHtml = '';
+    inputTokens.forEach((tid, idx) => {
+      const cls = idx === selectedIdx ? ' style="background:#ffd54f;color:#3e2723;font-weight:700;"' : ' style="cursor:pointer;"';
+      tokHtml += '<button onclick="window.lkSelect(' + idx + ')"' + cls + '>' + vocab[tid] + ' (#' + tid + ')</button> ';
+    });
+    document.getElementById('lk-tokens').innerHTML = tokHtml;
+
+    // Table
+    let tblHtml = '<table class="lookup-table"><tr><th>ID</th><th>词</th><th>d0</th><th>d1</th><th>d2</th><th>d3</th></tr>';
+    for (let r = 0; r < tableData.length; r++) {
+      const isHL = (selectedIdx >= 0 && r === inputTokens[selectedIdx]);
+      const cls = isHL ? 'row-hl' : '';
+      tblHtml += '<tr class="' + cls + '"><td>' + r + '</td><td>' + vocab[r] + '</td>';
+      for (let c = 0; c < 4; c++) {
+        tblHtml += '<td>' + tableData[r][c].toFixed(2) + '</td>';
+      }
+      tblHtml += '</tr>';
+    }
+    tblHtml += '</table>';
+    document.getElementById('lk-table').innerHTML = tblHtml;
+
+    // Vector display
+    if (selectedIdx >= 0) {
+      const tid = inputTokens[selectedIdx];
+      const vec = tableData[tid];
+      document.getElementById('lk-vector').innerHTML =
+        '<span style="color:var(--text);">[' + vec.map(v => v.toFixed(2)).join(', ') + ']</span><br>' +
+        '<span style="font-size:0.75rem;color:var(--muted);">来自第 ' + tid + ' 行（词：「' + vocab[tid] + '」）</span>';
+      document.getElementById('lk-selected').textContent = vocab[tid] + ' (ID=' + tid + ')';
+    }
+  }
+
+  window.lkSelect = function(idx) {
+    selectedIdx = idx;
+    renderEmbeddingDemo();
+  };
+
+  renderEmbeddingDemo();
+})();
+
+// ========== 位置编码热力图 ==========
+function renderHeatmap() {
+  const seqLen = parseInt(document.getElementById('pe-seq').value);
+  const dModel = parseInt(document.getElementById('pe-dim').value);
+  document.getElementById('pe-seq-display').textContent = seqLen;
+  document.getElementById('pe-dim-display').textContent = dModel;
+
+  // Generate PE matrix using the exact sin/cos formula
+  const pe = [];
+  for (let pos = 0; pos < seqLen; pos++) {
+    pe[pos] = [];
+    for (let i = 0; i < dModel; i++) {
+      const div = Math.pow(10000, (2 * Math.floor(i / 2)) / dModel);
+      const val = pos / div;
+      pe[pos][i] = (i % 2 === 0) ? Math.sin(val) : Math.cos(val);
+    }
+  }
+
+  // Render heatmap — show first 64 dims max, else subsample
+  const showCols = Math.min(dModel, 80);
+  const colStep = Math.max(1, Math.floor(dModel / showCols));
+  const showRows = seqLen;
+
+  let html = '<table>';
+  for (let r = 0; r < showRows; r++) {
+    html += '<tr>';
+    for (let c = 0; c < dModel; c += colStep) {
+      const v = pe[r][c];
+      // Map [-1, 1] to color: -1 = dark, 0 = mid, +1 = bright
+      const intensity = Math.round((v + 1) / 2 * 255);
+      const r_c = Math.round(intensity * 0.9);
+      const g_c = Math.round(intensity * 0.6);
+      const b_c = Math.round(intensity * 0.3);
+      html += '<td style="background:rgb(' + r_c + ',' + g_c + ',' + b_c + ');" title="pos=' + r + ' dim=' + c + ' val=' + v.toFixed(3) + '"></td>';
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  document.getElementById('pe-heatmap').innerHTML = html;
+}
+
+// ========== 输入组装演示 ==========
+function renderAssembly() {
+  const dropRate = parseFloat(document.getElementById('do-rate').value);
+  document.getElementById('do-rate-display').textContent = dropRate.toFixed(2);
+
+  // Fixed data for 3 positions, 6 dimensions
+  const tokEmb = [
+    [ 0.21, -0.45,  0.83, -0.12,  0.56, -0.31],
+    [-0.67,  0.34, -0.21,  0.75, -0.88,  0.15],
+    [ 0.92, -0.18,  0.44, -0.56,  0.74, -0.22]
+  ];
+  const posEmb = [
+    [ 0.00,  1.00,  0.00,  1.00,  0.00,  1.00],
+    [ 0.84,  0.54,  0.10,  1.00,  0.01,  1.00],
+    [ 0.91, -0.42,  0.20,  0.98,  0.03,  1.00]
+  ];
+
+  const tokens = ['我', '喜欢', '猫'];
+  const dims = ['d0', 'd1', 'd2', 'd3', 'd4', 'd5'];
+
+  // Sum and apply dropout
+  const summed = tokEmb.map((row, i) => row.map((v, j) => v + posEmb[i][j]));
+  const dropped = summed.map(row => row.map(v => Math.random() < dropRate ? 0 : v));
+  const droppedRounded = dropped.map(row => row.map(v => v === 0 ? 0 : parseFloat(v.toFixed(2))));
+
+  let html = '';
+  for (let p = 0; p < 3; p++) {
+    html += '<div style="margin-bottom:1rem;">';
+    html += '<div style="font-size:0.8rem;font-weight:600;margin-bottom:0.3rem;">位置 ' + p + '：「' + tokens[p] + '」</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:0.3rem;align-items:center;">';
+
+    // Token embedding
+    html += '<div class="asm-box tok" style="font-size:0.7rem;">tok_emb<br>';
+    for (let d = 0; d < 6; d++) {
+      html += '<span style="color:' + (tokEmb[p][d] >= 0 ? '#2e7d32' : '#c62828') + '">' + tokEmb[p][d].toFixed(2) + '</span> ';
+    }
+    html += '</div>';
+
+    html += '<span style="font-size:1.2rem;color:var(--muted);">+</span>';
+
+    // Position embedding
+    html += '<div class="asm-box pos" style="font-size:0.7rem;">pos_emb<br>';
+    for (let d = 0; d < 6; d++) {
+      html += '<span style="color:' + (posEmb[p][d] >= 0 ? '#2e7d32' : '#c62828') + '">' + posEmb[p][d].toFixed(2) + '</span> ';
+    }
+    html += '</div>';
+
+    html += '<span style="font-size:1.2rem;color:var(--muted);">=</span>';
+
+    // Result (with dropout)
+    html += '<div class="asm-box out" style="font-size:0.7rem;">输出<br>';
+    for (let d = 0; d < 6; d++) {
+      if (droppedRounded[p][d] === 0) {
+        html += '<span style="color:#999;text-decoration:line-through;">0.00</span> ';
+      } else {
+        html += '<span style="color:#1b5e20;font-weight:600;">' + droppedRounded[p][d].toFixed(2) + '</span> ';
+      }
+    }
+    html += '</div>';
+
+    html += '</div></div>';
+  }
+
+  document.getElementById('assembly-display').innerHTML = html;
+}
+
+// ========== 初始化 ==========
+renderHeatmap();
+renderAssembly();
+</script>
+</body>
+</html>
