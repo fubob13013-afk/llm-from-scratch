@@ -257,13 +257,234 @@
   在 LLM 里最常见的张量 shape 是 <code>(batch, seq_len, d_model)</code> —— 批次 × 序列长度 × 向量维度。
 </div>
 
-<div class="callout" style="border-color: var(--accent); background: #fef5f5;">
-  <strong>📘 觉得张量还不够清楚？</strong>
-  我们专门写了一篇 <a href="../tensor-deep-dive.html" style="font-weight:700;">《张量完全理解指南》</a>——
-  从「快递盒」的直觉出发，用可视化方式详解：为什么标量的 shape 是 <code>()</code> 或 <code>(1,)</code>？
-  Python 的 <code>[1,2,3]</code> 和 shape <code>(3,)</code> 有什么区别？<code>(batch, seq_len, d_model)</code> 到底长什么样？
-  五维张量存在吗？所有你关于张量的疑问，这里都有图形化的答案。
+<!-- 可折叠：张量深度理解 -->
+<details class="tensor-deep" style="margin: 1.25rem 0;">
+  <summary style="cursor:pointer;font-family:'Source Sans 3','Noto Sans CJK SC','PingFang SC',sans-serif;font-size:0.9rem;font-weight:600;color:var(--accent);user-select:none;padding:0.5rem 0;">
+    📦 点击展开：张量深度理解 —— 快递盒、Shape 写法、逐维可视化、LLM 中的 (B,L,D)（推荐初学者阅读）
+  </summary>
+
+  <div style="margin-top:0.75rem;padding:1.25rem 1.5rem;background:var(--callout-bg);border:1px solid var(--callout-border);border-radius:8px;">
+
+<!-- === 快递盒直觉 === -->
+<h3 style="margin-top:0;">🏷 一句话理解张量</h3>
+
+<blockquote style="margin-top:0.5rem;">
+  <strong>张量 = 一个装了数字的盒子，盒子的「形状（shape）」告诉你每个方向上有几个数字。</strong>
+</blockquote>
+
+<div style="display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0;justify-content:center;">
+  <div style="flex:1 1 140px;max-width:200px;padding:0.8rem;background:var(--bg);border:1px solid var(--rule);border-radius:8px;text-align:center;">
+    <div style="font-size:1.5rem;">📦</div>
+    <div style="font-weight:700;font-size:0.9rem;margin-top:0.3rem;">张量 = 盒子</div>
+    <div style="font-size:0.75rem;color:var(--muted);margin-top:0.2rem;">一个容器，里面装着很多数字</div>
+  </div>
+  <div style="flex:1 1 140px;max-width:200px;padding:0.8rem;background:var(--bg);border:1px solid var(--rule);border-radius:8px;text-align:center;">
+    <div style="font-size:1.5rem;">📐</div>
+    <div style="font-weight:700;font-size:0.9rem;margin-top:0.3rem;">Shape = 尺寸</div>
+    <div style="font-size:0.75rem;color:var(--muted);margin-top:0.2rem;">盒子的长宽高，告诉你怎么排列数字</div>
+  </div>
+  <div style="flex:1 1 140px;max-width:200px;padding:0.8rem;background:var(--bg);border:1px solid var(--rule);border-radius:8px;text-align:center;">
+    <div style="font-size:1.5rem;">⚡</div>
+    <div style="font-weight:700;font-size:0.9rem;margin-top:0.3rem;">GPU = 叉车</div>
+    <div style="font-size:0.75rem;color:var(--muted);margin-top:0.2rem;">知道尺寸就能一次搬走整个盒子，而不是一个一个捡</div>
+  </div>
 </div>
+
+<p style="font-size:0.9rem;color:var(--muted);">
+  <strong>为什么「给数据加上形状」就能一次性处理？</strong>因为 GPU 知道这堆数字的排列方式后，可以<strong>同时</strong>对所有数字做运算——而不是像 CPU 那样一个接一个。速度差 100 倍以上。
+</p>
+
+<!-- === Shape写法详解 === -->
+<h3>🔤 Shape 写法详解：<code>()</code>、<code>(1,)</code>、<code>(3,)</code> 到底什么意思？</h3>
+
+<div style="margin:0.8rem 0;padding:0.8rem 1rem;background:var(--bg);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;">
+  <p style="margin:0;font-weight:700;color:var(--accent);">❓ 为什么标量的 shape 写 <code>()</code> 或 <code>(1,)</code>？<code>(1,)</code> 跟向量 <code>(3,)</code> 看起来一样啊？</p>
+  <div style="margin-top:0.5rem;font-size:0.9rem;color:var(--muted);">
+    <p><strong>好问题！这是张量入门最常见的困惑。</strong></p>
+    <p><code>()</code>（空括号）= <strong>0 维张量</strong>，就是一个裸数字。比如 <code>torch.tensor(42).shape</code> 返回 <code>torch.Size([])</code>——0 个维度。</p>
+    <p><code>(1,)</code>（有一个数字的括号）= <strong>1 维张量</strong>，长度是 1。比如 <code>torch.tensor([42]).shape</code> 返回 <code>torch.Size([1])</code>——1 个维度，维度大小是 1。</p>
+    <p><strong>关键区别：</strong><code>()</code> 和 <code>(1,)</code> 都是 PyTorch 里的「合法 shape」，但维度不同。就像「一个孤立的苹果」vs「只装了一个苹果的袋子」——前者没有容器的概念，后者有。</p>
+    <p>对于向量来说，<code>(3,)</code> 同理：1 维，长度 3。就像「装了 3 个苹果的袋子」。</p>
+  </div>
+</div>
+
+<div style="margin:0.8rem 0;padding:0.8rem 1rem;background:var(--bg);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;">
+  <p style="margin:0;font-weight:700;color:var(--accent);">❓ Python 里为什么写成 <code>[1, 2, 3]</code>（方括号），而不是 <code>(3,)</code>（圆括号）？</p>
+  <div style="margin-top:0.5rem;font-size:0.9rem;color:var(--muted);">
+    <p><strong>因为它们是完全不同的两样东西：</strong></p>
+    <p><code>[1, 2, 3]</code>（方括号）= <strong>值本身</strong>——这是 Python 的 list，里面装的是具体数据。1、2、3 就是这三个数。</p>
+    <p><code>(3,)</code>（圆括号）= <strong>shape 描述</strong>——这是张量的「尺寸标签」，告诉你这个张量在第一个维度上有 3 个元素。<strong>shape 是容器的大小，list 是容器里的东西。</strong></p>
+    <p>打个比方：鞋盒标签写着「尺码 42」。<code>[鞋, 鞋垫, 鞋带]</code> 是盒子里的 3 样东西（值），而 <code>(3,)</code> 是描述「这个维度的尺寸是 3」。</p>
+  </div>
+</div>
+
+<!-- === 逐维可视化 === -->
+<h3>🎨 逐维可视化：从 0 维到 3 维</h3>
+
+<p style="font-size:0.9rem;">下面用<strong>同一种视觉风格</strong>展示每一级张量。注意看 shape 的数字如何对应网格的排列：</p>
+
+<style>
+  .td-cell { width:2.8rem;height:2.2rem;display:flex;align-items:center;justify-content:center;border-radius:3px;font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace;font-size:0.75rem;font-weight:500; }
+  .td-cell.d0 { background:#fff8e1;border:1.5px solid #e6c560;color:#8a6a20; }
+  .td-cell.d1 { background:#ffe8e8;border:1.5px solid #e88888;color:#a04040; }
+  .td-cell.d2 { background:#e8f0ff;border:1.5px solid #88a8e0;color:#3050a0; }
+  .td-cell.d3 { background:#e8ffe8;border:1.5px solid #78b878;color:#2a6a2a; }
+  @media (prefers-color-scheme: dark) {
+    .td-cell.d0 { background:#3a2a10;border-color:#8a7020;color:#ffd54f; }
+    .td-cell.d1 { background:#3a1818;border-color:#a04040;color:#f8a0a0; }
+    .td-cell.d2 { background:#101830;border-color:#4060a0;color:#a0c8ff; }
+    .td-cell.d3 { background:#102810;border-color:#407040;color:#a0e8a0; }
+  }
+  .td-grid { display:inline-grid;gap:3px;margin:0.3rem auto; }
+  .td-slice { display:inline-flex;flex-direction:column;gap:4px;margin:0.3rem;padding:6px;border:2px dashed var(--rule);border-radius:6px; }
+</style>
+
+<div style="margin:1rem 0;padding:1rem;background:var(--code-bg);border-radius:8px;text-align:center;overflow-x:auto;">
+
+  <div style="margin-bottom:1.5rem;">
+    <p style="font-weight:700;margin:0 0 0.3rem;">0 维 —— 标量（Scalar）</p>
+    <div class="td-grid" style="grid-template-columns:1fr;">
+      <div class="td-cell d0">42</div>
+    </div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:0.3rem;">Python: <code>42</code> ｜ Shape: <code>()</code> ｜ 就是一个数，没有方向</p>
+  </div>
+
+  <div style="margin-bottom:1.5rem;">
+    <p style="font-weight:700;margin:0 0 0.3rem;">1 维 —— 向量（Vector）</p>
+    <div class="td-grid" style="grid-template-columns:repeat(3,1fr);">
+      <div class="td-cell d1">1</div><div class="td-cell d1">2</div><div class="td-cell d1">3</div>
+    </div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:0.3rem;">Python: <code>[1, 2, 3]</code> ｜ Shape: <code>(3,)</code> ｜ 3 个数排成一条线</p>
+    <p style="font-size:0.72rem;color:var(--faint);">⚠ 「三维向量」的「维」指有 3 个数，不是「3 维空间」——别搞混</p>
+  </div>
+
+  <div style="margin-bottom:1.5rem;">
+    <p style="font-weight:700;margin:0 0 0.3rem;">2 维 —— 矩阵（Matrix）</p>
+    <div class="td-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="td-cell d2">1</div><div class="td-cell d2">2</div><div class="td-cell d2">3</div><div class="td-cell d2">4</div>
+      <div class="td-cell d2">5</div><div class="td-cell d2">6</div><div class="td-cell d2">7</div><div class="td-cell d2">8</div>
+      <div class="td-cell d2">9</div><div class="td-cell d2">0</div><div class="td-cell d2">1</div><div class="td-cell d2">2</div>
+    </div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:0.3rem;">Python: <code>[[1,2,3,4],[5,6,7,8],[9,0,1,2]]</code> ｜ Shape: <code>(3, 4)</code> ｜ 3 行 × 4 列</p>
+  </div>
+
+  <div>
+    <p style="font-weight:700;margin:0 0 0.3rem;">3 维 —— 3D 张量</p>
+    <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+      <div class="td-slice">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:2px;">切片 [0]</div>
+        <div class="td-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="td-cell d3">a₁</div><div class="td-cell d3">a₂</div><div class="td-cell d3">a₃</div><div class="td-cell d3">a₄</div>
+          <div class="td-cell d3">b₁</div><div class="td-cell d3">b₂</div><div class="td-cell d3">b₃</div><div class="td-cell d3">b₄</div>
+          <div class="td-cell d3">c₁</div><div class="td-cell d3">c₂</div><div class="td-cell d3">c₃</div><div class="td-cell d3">c₄</div>
+        </div>
+      </div>
+      <div class="td-slice">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:2px;">切片 [1]</div>
+        <div class="td-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="td-cell d3">d₁</div><div class="td-cell d3">d₂</div><div class="td-cell d3">d₃</div><div class="td-cell d3">d₄</div>
+          <div class="td-cell d3">e₁</div><div class="td-cell d3">e₂</div><div class="td-cell d3">e₃</div><div class="td-cell d3">e₄</div>
+          <div class="td-cell d3">f₁</div><div class="td-cell d3">f₂</div><div class="td-cell d3">f₃</div><div class="td-cell d3">f₄</div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:0.3rem;">Shape: <code>(2, 3, 4)</code> ｜ 读作「2 个矩阵，每个 3 行 4 列」</p>
+  </div>
+
+  <p style="font-size:0.75rem;color:var(--faint);margin-top:1rem;">
+    <strong>4 维</strong>（如 <code>(32, 224, 224, 3)</code> = 32 张 224×224 的 RGB 图片）和
+    <strong>5 维</strong>（如 <code>(2, 12, 128, 128, 64)</code> = 2 句 × 12 注意力头 × 128×128 矩阵 × 64 维）也是同理——<strong>每多一维，就是外面多套一层括号</strong>。N 维张量只看 shape 里有几个数字。
+  </p>
+</div>
+
+<!-- === Shape 速查表 === -->
+<h3>📋 Shape 速查表</h3>
+
+<table style="font-size:0.85rem;">
+  <tr><th>Shape</th><th>维数</th><th>读法</th><th>总元素数</th></tr>
+  <tr><td><code>()</code></td><td>0</td><td>一个标量</td><td>1</td></tr>
+  <tr><td><code>(5,)</code></td><td>1</td><td>5 个数排成一行</td><td>5</td></tr>
+  <tr><td><code>(3, 4)</code></td><td>2</td><td>3 行，每行 4 个数</td><td>12</td></tr>
+  <tr><td><code>(2, 3, 4)</code></td><td>3</td><td>2 个矩阵，每个 3×4</td><td>24</td></tr>
+  <tr><td><code>(2, 3, 4, 5)</code></td><td>4</td><td>2 个 3D 块，每块 3×4×5</td><td>120</td></tr>
+</table>
+
+<div style="padding:0.8rem 1rem;background:var(--callout-bg);border:1px solid var(--callout-border);border-radius:6px;margin-top:0.5rem;font-size:0.85rem;">
+  <strong>💡 速记公式：总元素数 = shape 里所有数字相乘。</strong><br>
+  <code>(2, 3, 4)</code> → 2×3×4 = 24 个元素。这条规则永远成立。
+</div>
+
+<!-- === (B, L, D) 详解 === -->
+<h3>🧠 LLM 里最常见的形状：<code>(batch, seq_len, d_model)</code></h3>
+
+<p style="font-size:0.9rem;">上面表格里提到了 <code>(B, L, D)</code>，这里展开解释——因为<strong>整个 Transformer 的数据都长这个形状</strong>。</p>
+
+<table style="font-size:0.85rem;">
+  <tr><th>字母</th><th>全称</th><th>含义</th><th>GPT-2 中的值</th></tr>
+  <tr>
+    <td><strong>batch</strong></td>
+    <td>批次大小</td>
+    <td>同时处理几句话（GPU 并行）</td>
+    <td>通常 8~64</td>
+  </tr>
+  <tr>
+    <td><strong>seq_len</strong></td>
+    <td>序列长度</td>
+    <td>每句话最多几个 token</td>
+    <td>通常 512 或 1024</td>
+  </tr>
+  <tr>
+    <td><strong>d_model</strong></td>
+    <td>向量维度</td>
+    <td>每个 token 用多少个数字表示</td>
+    <td>768（小）、1536（大）</td>
+  </tr>
+</table>
+
+<div style="margin:0.8rem 0;padding:1rem;background:var(--code-bg);border-radius:8px;font-size:0.82rem;line-height:1.9;">
+  <p style="margin:0 0 0.5rem;font-weight:700;">可视化：(2, 5, 768) 张量的结构</p>
+  <div style="border:2px solid var(--rule);border-radius:6px;padding:8px;margin:4px 0;">
+    <strong>batch=0</strong> 句子 "我爱北京"（3 token + 2 个填充位 ⬚）
+    <div style="margin-left:1em;border:1px solid var(--rule);border-radius:4px;padding:4px;margin-top:3px;font-size:0.78rem;">
+      token₀ "我" → [768 个数字的向量]<br>
+      token₁ "爱" → [768 个数字的向量]<br>
+      token₂ "北京" → [768 个数字的向量]<br>
+      token₃ ⬚ → [768 个零向量]<br>
+      token₄ ⬚ → [768 个零向量]
+    </div>
+  </div>
+  <div style="border:2px solid var(--rule);border-radius:6px;padding:8px;margin:4px 0;">
+    <strong>batch=1</strong> 句子 "天安门上看太阳升"（5 token）
+    <div style="margin-left:1em;border:1px solid var(--rule);border-radius:4px;padding:4px;margin-top:3px;font-size:0.78rem;">
+      token₀ "天安" → [768 个数据向量]<br>
+      token₁ "门" → [768 个数据向量]<br>
+      token₂ "上" → [768 个数据向量]<br>
+      token₃ "太阳" → [768 个数据向量]<br>
+      token₄ "升" → [768 个数据向量]
+    </div>
+  </div>
+  <p style="margin-top:0.5rem;color:var(--muted);">总元素 = 2 × 5 × 768 = <strong>7,680</strong> 个数字。GPU 一次处理全部。</p>
+</div>
+
+<p style="font-size:0.85rem;color:var(--muted);">
+  <strong>为什么需要 batch？</strong>没有 batch 时 GPU 一次只处理 1 句话，大量时间在等待数据。有了 batch（比如 32），GPU 一次处理 32 句话，利用率拉满，训练速度快 30 倍以上。
+</p>
+
+<!-- === 核心要点 === -->
+<h3>✅ 张量核心要点</h3>
+
+<ol style="font-size:0.9rem;">
+  <li><strong>张量 = 有形状的数字容器</strong>，标量/向量/矩阵/3D/ND 都是张量</li>
+  <li><strong>Shape 从外到内数括号层数</strong>，<code>(2,3,4)</code> = 「2 个矩阵，各 3 行 4 列」</li>
+  <li><strong>Python list <code>[1,2,3]</code> 是值本身</strong>，shape <code>(3,)</code> 是对结构的描述——两回事</li>
+  <li><strong>向量「3 维」指有 3 个数</strong>，不是 3 维空间——别把值的数量和空间维度搞混</li>
+  <li><strong><code>(batch, seq_len, d_model)</code></strong> 是 Transformer 中最核心的三维形状</li>
+  <li><strong>总元素数 = shape 所有数字相乘</strong>，永远成立</li>
+  <li><strong>GPU 知道 shape 就能并行</strong>——像叉车知道箱子尺寸就能一次搬走</li>
+</ol>
+
+  </div><!-- end 可折叠内容区 -->
+</details>
 
 <!-- 交互：张量形状探索器 -->
 <div class="tensor-viz">
@@ -280,14 +501,71 @@
 </div>
 
 <p>
-  在 PyTorch 里创建张量和创建 Python 列表一样简单，但多了一个「形状」的意识：
+  在 PyTorch 里创建张量和创建 Python 列表一样简单，但多了一个「形状」的意识。下面逐行拆解：
 </p>
 
-<div class="code-annotated">
-  <div class="line"><span class="code">x = torch.randn(2, 3, 4)</span><span class="note">创建一个 shape=(2,3,4) 的张量，里面是随机数</span></div>
-  <div class="line"><span class="code">x.shape  →  torch.Size([2, 3, 4])</span><span class="note">.shape 告诉你张量的尺寸，和 list 的 len() 类似但更强</span></div>
-  <div class="line"><span class="code">x[0]    →  shape (3, 4) 的矩阵</span><span class="note">取第一个「样本」，得到一个矩阵</span></div>
-  <div class="line"><span class="code">x[0, 1] →  shape (4,) 的向量</span><span class="note">取第一个样本的第二行</span></div>
+<div class="code-annotated" style="margin-bottom:1.5rem;">
+
+  <div class="line" style="margin-bottom:0.5rem;">
+    <span class="code">x = torch.randn(2, 3, 4)</span>
+    <span class="note">
+      <strong>randn</strong> = <strong>rand</strong>om <strong>n</strong>ormal（标准正态分布随机数）。<br>
+      参数 <strong>(2, 3, 4)</strong> 就是我们要的 shape：<br>
+      &nbsp;&nbsp;&nbsp;第 1 个数字 <strong>2</strong> → 最外层有 <strong>2 个</strong>矩阵<br>
+      &nbsp;&nbsp;&nbsp;第 2 个数字 <strong>3</strong> → 每个矩阵有 <strong>3 行</strong><br>
+      &nbsp;&nbsp;&nbsp;第 3 个数字 <strong>4</strong> → 每行有 <strong>4 个数</strong><br>
+      就像订制一个盒子：「长 2、宽 3、高 4」（然后里面随机填数字）。
+    </span>
+  </div>
+
+  <div class="line" style="margin-bottom:0.5rem;">
+    <span class="code">x.shape</span>
+    <span class="note">
+      <strong>.shape</strong> 是张量的<strong>尺寸属性</strong>（不是方法，不用加括号）。<br>
+      返回 <code>torch.Size([2, 3, 4])</code> —— 这是一个特殊的元组，告诉你「这个盒子长什么样」。<br>
+      类比：快递盒标签上印的「长×宽×高」。<br>
+      <strong>对比 Python list：</strong><code>len(lst)</code> 只能告诉你最外层有几个元素；<br>
+      <code>.shape</code> 告诉你<strong>每一层</strong>的尺寸，不管多少维。
+    </span>
+  </div>
+
+  <div class="line" style="margin-bottom:0.75rem;border-top:1px dashed var(--rule);padding-top:0.5rem;">
+    <span class="code">x[0]</span>
+    <span class="note">
+      <strong>索引规则：每用一个 [n]，就剥掉最外面一层。</strong><br>
+      x 的 shape = <strong>(2, 3, 4)</strong>：<br>
+      &nbsp;&nbsp;&nbsp;最外层有 2 个东西 → <code>x[0]</code> 取第 1 个 → 剥掉最外层<br>
+      &nbsp;&nbsp;&nbsp;剩下来的是 <strong>一个 shape = (3, 4) 的矩阵</strong>（3 行 × 4 列）<br>
+      <span style="color:var(--muted);font-size:0.78rem;">
+        图示：<code>(<del>2,</del> 3, 4)</code> → 去掉 2 这一维 → 剩下 <code>(3, 4)</code>
+      </span>
+    </span>
+  </div>
+
+  <div class="line" style="margin-bottom:0.5rem;">
+    <span class="code">x[0, 1]</span>
+    <span class="note">
+      <strong>连续索引：依次剥掉前两层的皮。</strong><br>
+      x 的 shape = (2, 3, 4)：<br>
+      &nbsp;&nbsp;&nbsp;<code>x[0]</code> 剥掉第一维 → 得到 shape (3, 4) 的矩阵<br>
+      &nbsp;&nbsp;&nbsp;<code>[1]</code> 再剥掉第二维 → 取这个矩阵的 <strong>第 2 行</strong>（索引从 0 开始）<br>
+      &nbsp;&nbsp;&nbsp;剩下来的是 <strong>一个 shape = (4,) 的向量</strong>（4 个数排成一条线）<br>
+      <span style="color:var(--muted);font-size:0.78rem;">
+        图示：<code>(<del>2, 3,</del> 4)</code> → 去掉前两维 → 剩下 <code>(4,)</code>
+      </span>
+    </span>
+  </div>
+
+</div>
+
+<div class="callout">
+  <strong>🧠 索引口诀</strong>
+  张量的索引 = <strong>逐层剥皮</strong>。<br>
+  shape <code>(A, B, C, D)</code>：<br>
+  &nbsp;&nbsp;&nbsp;<code>x[i]</code> → 剥掉 A 层 → shape 变成 <code>(B, C, D)</code><br>
+  &nbsp;&nbsp;&nbsp;<code>x[i, j]</code> → 剥掉 A 和 B 层 → shape 变成 <code>(C, D)</code><br>
+  &nbsp;&nbsp;&nbsp;<code>x[i, j, k]</code> → 剥掉 A、B、C 层 → shape 变成 <code>(D,)</code><br>
+  <strong>用了几个索引，就剥掉几层。剩下的 shape 就是结果。</strong>
 </div>
 
 <!-- ====== 概念二：张量运算 ====== -->
