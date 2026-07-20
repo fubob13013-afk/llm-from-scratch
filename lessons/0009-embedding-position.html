@@ -253,11 +253,249 @@
   <li><strong>10000<sup>2i/d</sup></strong>：控制波浪频率——越靠前的维度对，波浪越快；越靠后，波浪越慢</li>
 </ul>
 
+<!-- ====== 零基础详解：正弦位置编码到底在干什么 ====== -->
+<h3>🔰 零基础详解：正弦位置编码到底在干什么</h3>
+
+<p>
+  上面的解释如果你还觉得抽象，没关系——这一节用<strong>纯大白话 + 具体比喻</strong>，把公式的每一部分拆开揉碎。
+  不需要你懂高数，只需要小学水平的加减乘除和对 sin/cos 的最浅印象。
+</p>
+
+<h4>🎹 核心比喻：钢琴卷帘窗</h4>
+
+<p>
+  如果你用过任何音频编辑软件（达芬奇的 Fairlight、Audition、Logic Pro 都行），一定见过<strong>钢琴卷帘窗（Piano Roll）</strong>：
+</p>
+
+<ul>
+  <li><strong>横轴</strong> = 时间（第 1 拍、第 2 拍、第 3 拍……）</li>
+  <li><strong>纵轴</strong> = 音高（上面是高音短笛，下面是低音贝斯）</li>
+  <li>每个格子 = 某一拍、某一个音高上，有没有音符</li>
+</ul>
+
+<p>
+  正弦位置编码做的事，<strong>几乎一模一样</strong>。想象一张 768 行的大表格：
+</p>
+
+<ul>
+  <li><strong>横轴（列）= 句子的第几个词</strong>——第 0 列 = 第 1 个词，第 3 列 = 第 4 个词</li>
+  <li><strong>纵轴（行）= 向量的第几个维度</strong>——第 0 行是维度 0，第 767 行是维度 767</li>
+  <li>每个格子里填一个介于 <strong>-1 到 +1</strong> 之间的数字</li>
+</ul>
+
+<p>
+  但和钢琴卷帘窗不同的是：<strong>每个格子的数字不是随便填的，而是由 sin 和 cos 函数生成的波浪图案</strong>。
+  前几行（小维度编号）是<strong>高频短波</strong>——每个位置数值剧烈跳动；
+  后几行（大维度编号）是<strong>低频长波</strong>——走完整句话才完成半个起伏。
+</p>
+
+<p>
+  这样，<strong>每个词位置拿到的 768 个数字组合，在这个「波浪系统」里都是独一无二的</strong>。
+  就像每个人的指纹由不同密度的纹路混合而成——细纹 + 粗纹 + 螺旋 = 唯一身份。
+</p>
+
+<h4>📐 公式逐字翻译</h4>
+
+<p>先再看一眼公式，然后我们用颜色标注逐块翻译：</p>
+
+<div class="formula-block">
+  PE(<span style="color:#ef5350;">pos</span>, <span style="color:#42a5f5;">2i</span>) &nbsp; = sin( <span style="color:#ef5350;">pos</span> / 10000<sup><span style="color:#42a5f5;">2i</span>/d<sub>model</sub></sup> )<br>
+  PE(<span style="color:#ef5350;">pos</span>, <span style="color:#42a5f5;">2i</span>+1) = cos( <span style="color:#ef5350;">pos</span> / 10000<sup><span style="color:#42a5f5;">2i</span>/d<sub>model</sub></sup> )
+</div>
+
+<table>
+  <tr><th>符号</th><th>大白话</th><th>举个例子</th></tr>
+  <tr>
+    <td><strong>PE</strong></td>
+    <td>「位置编码」这个函数的缩写，就像 f(x) 里的 f。PE(位置, 维度) = 这个格子填什么数字</td>
+    <td>PE(3, 0) = 「第 4 个词的第 0 维填什么」</td>
+  </tr>
+  <tr>
+    <td><strong style="color:#ef5350;">pos</strong></td>
+    <td><strong>位置编号</strong>，从 0 开始数：第 1 个词 pos=0，第 2 个词 pos=1……</td>
+    <td>句子「我 喜欢 猫」→ 三个词的 pos 分别是 0, 1, 2</td>
+  </tr>
+  <tr>
+    <td><strong style="color:#42a5f5;">i</strong></td>
+    <td><strong>维度对的编号</strong>。768 维分成 384 对，i 从 0 到 383。i=0 是第 0 对（维度 0+1），i=383 是第 383 对（维度 766+767）</td>
+    <td>i=0 → 管维度 0 和 1；i=5 → 管维度 10 和 11</td>
+  </tr>
+  <tr>
+    <td><strong style="color:#42a5f5;">2i</strong></td>
+    <td>第 i 对里的<strong>偶数维度</strong>编号</td>
+    <td>i=0 时 2i=0（维度 0）；i=5 时 2i=10（维度 10）</td>
+  </tr>
+  <tr>
+    <td><strong style="color:#42a5f5;">2i+1</strong></td>
+    <td>第 i 对里的<strong>奇数维度</strong>编号</td>
+    <td>i=0 时 2i+1=1（维度 1）；i=5 时 2i+1=11（维度 11）</td>
+  </tr>
+  <tr>
+    <td><strong>d<sub>model</sub></strong></td>
+    <td>向量的<strong>总维度数</strong>，一个固定常数（GPT-2 里 = 768）</td>
+    <td>全文不变，始终是 768</td>
+  </tr>
+  <tr>
+    <td><strong>10000</strong></td>
+    <td><strong>频率缩放基数</strong>，一个经验常数。用它来确保最高频和最低频覆盖的范围刚好适合模型的序列长度</td>
+    <td>不是推导出来的，是试出来的好数字（详见下文）</td>
+  </tr>
+</table>
+
+<h4>🧠 核心直觉：pos 和 i 的区别——一句话记住</h4>
+
+<p>
+  很多初学者卡在「pos 和 i 到底谁是谁」上。记住这个画面：
+</p>
+
+<div style="margin:1rem 0;padding:1rem;background:var(--code-bg);border-radius:8px;text-align:center;">
+  <p style="margin:0;font-size:1rem;">
+    <strong>pos</strong> 是「<span style="color:#ef5350;">第几个词</span>」→ <span style="color:#ef5350;">竖向看</span>，遍历整句话的每个词<br>
+    <strong>i</strong> 是「<span style="color:#42a5f5;">第几对维度</span>」→ <span style="color:#42a5f5;">横向看</span>，遍历每个词向量内部的维度对
+  </p>
+</div>
+
+<p>
+  具体来说：当你固定 <strong>pos=3</strong>（只看第 4 个词），让 i 从 0 跑到 383，你就得到了这个词的<strong>完整 768 维位置编码</strong>。
+  当你固定 <strong>i=0</strong>（只看最前面那对维度），让 pos 从 0 跑到句子末尾，你就看到了<strong>这一对维度在所有位置上的波浪变化</strong>。
+</p>
+
+<h4>📏 为什么是 10000？——「唱片」比喻</h4>
+
+<p>
+  10000 这个数字看起来很奇怪，但它只做一件事：<strong>控制波浪频率的范围</strong>。
+</p>
+
+<p>
+  想象一张<strong>黑胶唱片</strong>：
+</p>
+
+<ul>
+  <li>唱片的外圈纹路密集（高频），内圈纹路稀疏（低频）</li>
+  <li>从外圈到内圈，频率<strong>连续渐变</strong></li>
+  <li>10000 就是决定「外圈多密、内圈多疏」的那个旋钮</li>
+</ul>
+
+<p>具体计算一下你就懂了：</p>
+
+<div style="margin:1rem 0;padding:1rem 1.25rem;background:var(--code-bg);border-radius:8px;font-family:'JetBrains Mono','Cascadia Code',Consolas,monospace;font-size:0.82rem;line-height:1.8;">
+  d<sub>model</sub> = 768<br><br>
+  <span style="color:var(--muted);">// 最高频维度对（i=0）：</span><br>
+  分母 = 10000<sup>0/768</sup> = 10000<sup>0</sup> = <strong>1</strong><br>
+  → sin(pos / 1) → 每 ≈6 个位置完成一次上下震荡 → <strong>超高频 🔔</strong><br><br>
+  <span style="color:var(--muted);">// 中间维度对（i=191）：</span><br>
+  分母 = 10000<sup>382/768</sup> = 10000<sup>0.5</sup> = <strong>100</strong><br>
+  → sin(pos / 100) → 每 ≈628 个位置完成一次震荡 → <strong>中频 🎻</strong><br><br>
+  <span style="color:var(--muted);">// 最低频维度对（i=383）：</span><br>
+  分母 = 10000<sup>766/768</sup> ≈ <strong>10000</strong><br>
+  → sin(pos / 10000) → 在 1024 个位置范围内几乎是一条缓坡 → <strong>超低频 🎸</strong>
+</div>
+
+<p>
+  为什么恰好是 10000？因为这个值能保证：<strong>最高频精确到能区分相邻词，最低频平缓到能给整句话一个「区域感」，中间覆盖了全部过渡频率</strong>。
+  它不是数学推导的必然，是论文作者试出来效果好的<strong>工程经验值</strong>。换成 5000 或 20000 也能跑，但 10000 在当时（序列长度 ≈ 512~1024）效果最好。
+</p>
+
+<h4>🌊 为什么必须 sin 和 cos 成对出现？——「钟表指针」比喻</h4>
+
+<p>
+  注意公式里每对维度（2i 和 2i+1）用的是<strong>同一个分母</strong>（同一个频率），只是一个填 sin、另一个填 cos。
+  这不是随便选的——它背后藏着一个精巧的设计。
+</p>
+
+<p>
+  想象一个<strong>钟表的指针</strong>：
+</p>
+
+<ul>
+  <li>要描述指针在表盘上的位置，你需要<strong>两个数字</strong>：水平偏移（cos）和垂直偏移（sin）</li>
+  <li>光知道 sin（垂直偏移）不够——指针在 12 点和 6 点都是 sin=0，你分不清</li>
+  <li>但 <strong>sin + cos 组合</strong>可以唯一确定指针指向几点钟</li>
+</ul>
+
+<p>
+  每一对维度（sin + cos）就像是<strong>以不同速度旋转的钟表指针</strong>：
+</p>
+
+<ul>
+  <li>i=0（高频对）：指针转得飞快——每走过 6 个词就转完一圈</li>
+  <li>i=383（低频对）：指针转得极慢——走完整篇文章才转几十度</li>
+  <li>所有 384 对维度合在一起 = <strong>384 个不同转速的钟表指针同时记录位置</strong></li>
+</ul>
+
+<p>
+  这带来了一个关键好处：<strong>相对位置可计算</strong>。利用三角恒等式 sin(a+b) = sin(a)cos(b) + cos(a)sin(b)，
+  模型可以<strong>通过线性变换从位置 A 的编码算出位置 B 的编码</strong>。
+  这意味着模型学到的不是「位置 7 长这样」的死记硬背，而是「这两个词相距多远」的相对关系。
+</p>
+
+<h4>🎯 完整走一遍：三个词是怎么被「编码」的</h4>
+
+<p>假设句子只有三个词：「我 喜欢 猫」，d<sub>model</sub>=4（简化到 4 维），我们来手动走一遍：</p>
+
+<div style="margin:1rem 0;overflow-x:auto;">
+<table>
+  <tr><th>步骤</th><th>操作</th><th>结果</th></tr>
+  <tr>
+    <td>1</td>
+    <td>三个词的 token ID：<strong>[42, 318, 7]</strong></td>
+    <td>每个 ID 是一个整数，没有位置信息</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>Embedding 查表：取出每行 4 个数字</td>
+    <td>
+      词 0「我」：&nbsp; [0.21, -0.45, &nbsp;0.83, -0.12]<br>
+      词 1「喜欢」：[-0.67, &nbsp;0.34, -0.21, &nbsp;0.75]<br>
+      词 2「猫」：&nbsp; [0.92, -0.18, &nbsp;0.44, -0.56]
+    </td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>位置编码计算（sin/cos 公式）</td>
+    <td>
+      pos=0：&nbsp; [sin(0), cos(0), sin(0), cos(0)] = <strong>[0, 1, 0, 1]</strong><br>
+      pos=1：&nbsp; [sin(1), cos(1), sin(1/100), cos(1/100)] ≈ <strong>[0.84, 0.54, 0.01, 1.00]</strong><br>
+      pos=2：&nbsp; [sin(2), cos(2), sin(2/100), cos(2/100)] ≈ <strong>[0.91, -0.42, 0.02, 1.00]</strong>
+    </td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><strong>逐元素相加</strong>（词嵌入 + 位置编码）</td>
+    <td>
+      词 0：&nbsp; [0.21+0, &nbsp; -0.45+1, &nbsp; &nbsp;0.83+0, &nbsp; -0.12+1] = <strong>[0.21, 0.55, 0.83, 0.88]</strong><br>
+      词 1：&nbsp; [-0.67+0.84, 0.34+0.54, -0.21+0.01, 0.75+1.00] = <strong>[0.17, 0.88, -0.20, 1.75]</strong><br>
+      词 2：&nbsp; [0.92+0.91, -0.18-0.42, 0.44+0.02, -0.56+1.00] = <strong>[1.83, -0.60, 0.46, 0.44]</strong>
+    </td>
+  </tr>
+</table>
+</div>
+
+<p>
+  观察第 3 步中的位置编码：<strong>维度 0-1</strong>（i=0，高频，分母=1）数值在三个位置上剧烈变化（0→0.84→0.91）；
+  <strong>维度 2-3</strong>（i=1，低频，分母=100）数值变化极小（0.01→0.02），几乎不变。
+</p>
+
+<p>
+  加到词嵌入上之后（第 4 步），同一个词「我」在 pos=0 和 pos=2 的最终向量<strong>完全不同</strong>——
+  尽管词嵌入一样，位置编码的加入让模型可以区分「开头位置的我」和「中间位置的我」。
+</p>
+
+<h4>✅ 一句话总结</h4>
+
 <div class="callout">
-  <strong>💡 为什么用 sin/cos？</strong><br>
+  <strong>正弦位置编码 = 给每个位置发一张由 384 种不同转速的 sin/cos 波浪叠加而成的「指纹」</strong>。<br><br>
+  高频波（前列维度）提供精确位置 → 区分「第 3 个词」和「第 4 个词」<br>
+  低频波（后列维度）提供区域位置 → 判断「在句子前半段还是后半段」<br>
+  全部叠加在一起 → 每个位置的 768 个数字组合在整个序列中独一无二<br><br>
+  这张「指纹」加到词嵌入向量上，Token ID 就从「什么词」变成了「什么词 + 在哪个位置」。
+</div>
+
+<div class="callout">
+  <strong>💡 为什么用 sin/cos 而不是随机数？</strong><br>
   两个好处：<br>
   1. <strong>值域稳定</strong>：sin/cos 输出永远在 [-1, 1] 之间，不会像可学习参数那样出现极端值<br>
-  2. <strong>相对位置可外推</strong>：sin(a+b) = sin(a)cos(b) + cos(a)sin(b)——模型可以从中学到两个位置之间的<strong>相对距离</strong>，而不只是绝对位置。这意味训练时只见过 1024 长度的序列，推理时可能处理更长的
+  2. <strong>相对位置可外推</strong>：sin(a+b) = sin(a)cos(b) + cos(a)sin(b)——模型可以从中学到两个位置之间的<strong>相对距离</strong>，而不只是绝对位置。这意味着训练时只见过 1024 长度的序列，推理时可能处理更长的序列
 </div>
 
 <h3>把公式变成代码</h3>

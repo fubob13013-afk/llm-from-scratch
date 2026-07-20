@@ -136,7 +136,6 @@ git clone https://github.com/fubob13013-afk/llm-from-scratch.git
 │   ├── 0013~0016           # Phase 3: 训练实战 (4课)
 │   ├── 0017~0019           # Phase 4: 理解优化 (3课)
 │   └── 0020                # Phase 5: 进阶方向 (1课)
-├── lessons_backup/         # v1.0 原始版本备份
 └── learning-records/       # 学习记录（Bob 的课后笔记）
 ```
 
